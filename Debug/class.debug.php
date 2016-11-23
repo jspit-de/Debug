@@ -3,7 +3,7 @@
 	Simple PHP Debug Class
 .---------------------------------------------------------------------------.
 |  Software: Debug - Simple PHP Debug Class                                 |
-|   Version: 2.00                                                           |
+|   Version: 2.02                                                           |
 |      Site: http://jspit.de/?page=debug                                    |
 | ------------------------------------------------------------------------- |
 | Copyright © 2010-2016, Peter Junk (alias jspit). All Rights Reserved.     |
@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Last modify : 2016-01-24
+  Last modify : 2016-11-23
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -35,6 +35,9 @@
   2016-02-05: V1.96 getClean() -> html umbenannt V 1.96
   2016-04-14: V1.98 + checkPerformance, rename fkt -> wrFctCheck
   2016-08-30: V2.00 + format output xml
+  2016-11-10: V2.01 + debug::switchLog
+  2016-11-22: V2.02 + debug::deleteLogFile
+  2016-11-23: V2.02 + debug::log("TMP"), debug::getLogFileName();
   
 */
 if (version_compare(PHP_VERSION, '5.3.0', '<') ) exit("Simple PHP Debug Class requires at least PHP version 5.3.0!\n");
@@ -103,6 +106,8 @@ class Debug
   protected static $log_file_append = false;
   //
   protected static $stopCounter = null;
+  //
+  protected static $switchOn = true;
 
   
   /*
@@ -124,6 +129,7 @@ class Debug
         if( self::$log_file_append = (substr($filename,0,1)=== '+')) $filename = substr($filename,1);
         if( !self::$log_file_append || !file_exists($filename)) {
           //create a new logfile
+          if($filename === "TMP") $filename = self::tmpFileName();
           $content = '<!DOCTYPE html>'."\r\n".
             '<html><head>'."\r\n".
             '<meta http-equiv="content-type" content="text/html;charset=utf-8">'."\r\n".
@@ -164,7 +170,7 @@ class Debug
   */
   public static function save(/** $var1, $var2, .. **/) 
   {
-    if (!self::$debug_on_off) return;
+    if (!self::$debug_on_off OR !self::$switchOn) return;
     $argv = func_get_args();
     $backtrace = debug_backtrace();
     self::$recbuf .= self::recArg($argv,$backtrace);
@@ -175,7 +181,7 @@ class Debug
   */
   public static function write(/** $var1, $var2, .. **/) 
   {
-    if (!self::$debug_on_off) return;  //do nothing if $debug_on_off == false
+    if (!self::$debug_on_off OR !self::$switchOn) return;  //do nothing 
     $argv = func_get_args();
     $backtrace = debug_backtrace();
     self::displayAndLog($argv,$backtrace);  
@@ -184,7 +190,7 @@ class Debug
   //write with color red
   public static function wrc(/** $var1, $var2, .. **/) 
   {
-    if (!self::$debug_on_off) return;  //do nothing if $debug_on_off == false
+    if (!self::$debug_on_off  OR !self::$switchOn) return;  //do nothing 
     $defaultFormat = self::$trHeadStyle;
     self::setTitleColor('#a00');
     $argv = func_get_args();
@@ -207,14 +213,14 @@ class Debug
 
 
   /*
-  * general output like write a output for saved and actual debug-infos on display or logfile and exit
-  * $condition : if condition ist true or null then write and exit, in the other case do nothing
+  * general output like write a output for saved and actual debug-infos on display or logfile 
+  * $condition : if condition ist true or null then write and throw a exception, in the other case do nothing
   * if $condition is int, write and stop at the $condition call
   * if $condition is int and 0 or <0 do nothing (also no  decrement stopCounter)
   */
   public static function stop($condition = null /**, $var1, $var2, .. **/) 
   {
-    if (!self::$debug_on_off) return null;  //do nothing if $debug_on_off == false
+    if (!self::$debug_on_off OR !self::$switchOn) return null;  //do nothing
     $argv = func_get_args();
     $exceptionMessage = "";
     if($condition !== null) {
@@ -310,13 +316,22 @@ class Debug
   }
 
   /*
-   * return char for Unicode-Format U+20ac 
+   * return char for Unicode-Format U+20ac (U+0000..U+3FFF)
    */
   public static function UniDecode($strUplus){
     $strUplus = preg_replace("/U\+([0-9A-F]{4})/i", "&#x\\1;", $strUplus); //4 Hexzahlen nach U+ rausfiltern
-    return html_entity_decode($strUplus, ENT_NOQUOTES, 'UTF-8');
+    return html_entity_decode($strUplus, ENT_QUOTES, 'UTF-8');
    }
-  
+
+  /*
+   * return Unicode-Format U+20ac for first char of string
+   */
+  public static function UniEncode($char){
+    $char = mb_substr($char,0,1,"UTF-8");
+    $charUTF16 = mb_convert_encoding($char,"UTF-16","UTF-8");
+    return 'U+'.bin2hex($charUTF16);
+  }
+   
   /*
    * tries to determine the charset of string
    * return p.E. 'UTF-8','UTF-8 BOM','ISO-8859-1','ASCII' 
@@ -419,10 +434,58 @@ class Debug
     return $r;
   }
   
-  //set a new colr for background of title
+  //set a new color for background of title
   public static function setTitleColor($backgroundColor) {
     self::$trHeadStyle = preg_replace('/background-color:.+;/','background:'.$backgroundColor.';',self::$trHeadStyle);
   }
+ 
+ /*
+  * Activate the log depending on the contents of the file
+  * If content "1" Log is enabled, else if content "0" disabled
+  * If param is bool, permanent activ/deaktive with true/false
+  * Default filePath: __DIR__.'/debug.switch'
+  */  
+  public static function switchLog($filePath = NULL){
+    if(is_bool($filePath)) {
+      self::$switchOn = $filePath;
+      return;
+    }
+    if(empty($filePath)) {
+      $backtrace = debug_backtrace();
+      $calledDir = isset($backtrace[0]['file']) 
+        ? dirname($backtrace[0]['file'])."/"
+        : "" ;
+      $filePath = $calledDir.'debug.switch';
+    }
+    if(is_readable($filePath)) {
+      self::$switchOn = (bool)(int)file_get_contents($filePath);
+    }
+    else {
+      $message = "Switch-File ".$filePath." is not readable";
+      trigger_error(htmlspecialchars($message,ENT_QUOTES,"UTF-8"), E_USER_WARNING);
+    }
+  }
+  
+ /*
+  * Delete a Logfile set with debug::log("filename")
+  * debug::write after deleteLogFile will display on screen
+  */  
+  public static function deleteLogFile(){
+    if(self::$logfilename != "") {
+      if(file_exists(self::$logfilename)) {
+        unlink(self::$logfilename);
+      }
+      self::$logfilename = "";
+    }
+  }
+  
+ /*
+  * get the current LogFileName
+  */
+  public static function getLogFileName(){
+    return self::$logfilename;
+  }
+  
 
  /*
   * non public functions
@@ -638,6 +701,12 @@ class Debug
     return $dom->saveXML();
   }
 
-  
+  //creates a temporary filename from the current time
+  //return. Name p.E. "log20161123095906_9065.html"
+  private static function tmpFileName($extension = ".html"){
+    $ms = sprintf("%04d", (int)(10000 * fmod(microtime(true),1.0)));
+    $fileName = "log".date("YmdHis")."_".$ms.$extension;
+    return $fileName;  
+  }
 
 }
