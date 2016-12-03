@@ -3,7 +3,7 @@
 	Simple PHP Debug Class
 .---------------------------------------------------------------------------.
 |  Software: Debug - Simple PHP Debug Class                                 |
-|   Version: 2.02                                                           |
+|   Version: 2.03                                                           |
 |      Site: http://jspit.de/?page=debug                                    |
 | ------------------------------------------------------------------------- |
 | Copyright © 2010-2016, Peter Junk (alias jspit). All Rights Reserved.     |
@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Last modify : 2016-11-23
+  Last modify : 2016-12-03
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -38,7 +38,7 @@
   2016-11-10: V2.01 + debug::switchLog
   2016-11-22: V2.02 + debug::deleteLogFile
   2016-11-23: V2.02 + debug::log("TMP"), debug::getLogFileName();
-  
+  2016-12-03: V2.03 + display image from resource(gd)
 */
 if (version_compare(PHP_VERSION, '5.3.0', '<') ) exit("Simple PHP Debug Class requires at least PHP version 5.3.0!\n");
 if (isset($_SERVER["SCRIPT_NAME"]) && basename($_SERVER["SCRIPT_NAME"])== basename(__FILE__))die();
@@ -285,8 +285,8 @@ class Debug
   public static function microSleep($microSeconds) {
     $tStart = microtime(true);
     $tEnd = $microSeconds * 1.E-6 + $tStart;
-    while( microtime(true)< $tEnd);
-    return microtime(true) - $tStart;
+    while( microtime(true)<= $tEnd);
+    return (int)((microtime(true) - $tStart)*1000000.);
   }
   
   /*
@@ -615,18 +615,34 @@ class Debug
       $recadd .= '<tr><td style="width:'.self::$col1width.';'.self::$tdStyle.'"><b> '.
         $k.'</b></td><td style="width:'.self::$col2width.';'.self::$tdStyle.'">';
       $pre = is_object($arg) || is_array($arg) ? '<pre style="display:inline">' : "";
-      $recadd .= self::TypeInfo($arg).'</td><td style="'.self::$tdStyle.'">'.$pre;
+      $typeInfo = self::TypeInfo($arg);
+      $recadd .= $typeInfo.'</td><td style="'.self::$tdStyle.'">'.$pre;
       if(is_int($arg)) {
         $t = $arg." [".strtoupper(sprintf("%08x", $arg))."h]";
       }
       elseif(is_string($arg)) {
         $t = self::$showSpecialChars ? ('"'.self::str2print($arg).'"') : $arg;
       }
-      /*
-      elseif(is_float($arg)) {
-        $t = serialize($arg);
+      elseif($typeInfo === 'resource(gd)') {
+        $attribute = 'style="max-height:10rem;max-width:10rem;"';
+        ob_start();
+        $php_errormsg = "";
+        if( @imagepng($arg) ) {
+          $t = '<img src="data:image/png;base64,' . 
+            base64_encode(ob_get_clean()).
+            '" '. $attribute .' />';
+          if($php_errormsg) {
+            $t .= " ".self::esc(strip_tags($php_errormsg));
+          }
+          else {
+            $t .= " ".imagesx($arg)." x ".imagesy($arg)." px";  
+          }
+        }
+        else {
+          ob_get_clean();
+          $t = isset($php_errormsg) ? self::esc(strip_tags($php_errormsg)) : "Error creating image";          
+        }
       }
-      */
       else {
         if($arg instanceof SimpleXMLElement) {
           //$t = $arg->asXML();
@@ -663,12 +679,17 @@ class Debug
           $t
           );
       }
-      $recadd .= str_replace(
-        array('{~+~}','{~-~}'),
-        array('<span style="background:#ccc;margin:1px;">','</span>'),
-        self::esc($t)
-        );
-      $recadd .= ($pre ? '</pre>' : '')."</td></tr>";
+      if($typeInfo === 'resource(gd)') {
+        $recadd .= $t."</td></tr>";
+      }
+      else {
+        $recadd .= str_replace(
+          array('{~+~}','{~-~}'),
+          array('<span style="background:#ccc;margin:1px;">','</span>'),
+          self::esc($t)
+          );
+        $recadd .= ($pre ? '</pre>' : '')."</td></tr>";
+      }
     }
     $recadd .= "</table>"."\r\n";
     return $recadd;
