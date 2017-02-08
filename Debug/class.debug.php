@@ -1,9 +1,9 @@
 <?php
-/*
+/**
 	Simple PHP Debug Class
 .---------------------------------------------------------------------------.
 |  Software: Debug - Simple PHP Debug Class                                 |
-|   Version: 2.03                                                           |
+|  @Version: 2.0.4                                                          |
 |      Site: http://jspit.de/?page=debug                                    |
 | ------------------------------------------------------------------------- |
 | Copyright © 2010-2016, Peter Junk (alias jspit). All Rights Reserved.     |
@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Last modify : 2016-12-03
+  Last modify : 2017-02-08
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -39,6 +39,7 @@
   2016-11-22: V2.02 + debug::deleteLogFile
   2016-11-23: V2.02 + debug::log("TMP"), debug::getLogFileName();
   2016-12-03: V2.03 + display image from resource(gd)
+  2017-02-08: V2.04 + debug::isOn()
 */
 if (version_compare(PHP_VERSION, '5.3.0', '<') ) exit("Simple PHP Debug Class requires at least PHP version 5.3.0!\n");
 if (isset($_SERVER["SCRIPT_NAME"]) && basename($_SERVER["SCRIPT_NAME"])== basename(__FILE__))die();
@@ -78,7 +79,7 @@ class Debug
 
   */
   
-  const VERSION = "2.0";
+  const VERSION = "2.0.4";
   //convert special chars in hex-code
   public static $showSpecialChars = true;           
   //shows the debug info promptly
@@ -108,7 +109,10 @@ class Debug
   protected static $stopCounter = null;
   //
   protected static $switchOn = true;
-
+  //
+  protected static $gdStyle = 'max-height:20rem;max-width:20rem;';
+  protected static $gdOutputFormat = 'png';
+  
   
   /*
   * start/stop logging display/logfile
@@ -303,7 +307,11 @@ class Debug
       $objlenght = max(count($obj),count((array)$obj),(property_exists($obj,'length') ? $obj->length : 0));
       return $objType."(".get_class($obj).")(".$objlenght.")"; //2013
       }
-    if(is_resource($obj)) return $objType."(".get_resource_type($obj).")"; 
+    if(is_resource($obj)) return $objType."(".get_resource_type($obj).")(".(int)$obj.")";
+    if((bool)$obj AND var_export($obj,true)==='NULL') {
+      //closed Resource
+      return "resource(?)(".(int)$obj.")";
+    }    
     return $objType;
   }
    
@@ -438,6 +446,17 @@ class Debug
   public static function setTitleColor($backgroundColor) {
     self::$trHeadStyle = preg_replace('/background-color:.+;/','background:'.$backgroundColor.';',self::$trHeadStyle);
   }
+  
+  //set style for gd-resource
+  public static function setImgStyle($style){
+    self::$gdStyle = $style;
+  }
+  
+  //set $gdOutputFormat
+  //param Ident : "png" or "jpg"
+  public static function setGdOutputFormat($Ident){
+    self::$gdOutputFormat = preg_match('~^\.?j*~i',$Ident) ? 'jpg' : 'png';
+  }
  
  /*
   * Activate the log depending on the contents of the file
@@ -485,6 +504,14 @@ class Debug
   public static function getLogFileName(){
     return self::$logfilename;
   }
+  
+ /*
+  * return true if debug mode is on
+  */
+  public static function isOn(){
+    return self::$debug_on_off;
+  }
+  
   
 
  /*
@@ -623,13 +650,20 @@ class Debug
       elseif(is_string($arg)) {
         $t = self::$showSpecialChars ? ('"'.self::str2print($arg).'"') : $arg;
       }
-      elseif($typeInfo === 'resource(gd)') {
-        $attribute = 'style="max-height:10rem;max-width:10rem;"';
+      elseif(strncmp($typeInfo,'resource(gd)',12) === 0) {
+        $attribute = 'style="'.self::$gdStyle.'"';
         ob_start();
         $php_errormsg = "";
-        if( @imagepng($arg) ) {
-          $t = '<img src="data:image/png;base64,' . 
-            base64_encode(ob_get_clean()).
+        if(self::$gdOutputFormat == 'jpg') {
+          $imgOk = @imagejpeg($arg,NULL,85);
+          $t = '<img src="data:image/jpeg;base64,';
+        }
+        else {
+          $imgOk = @imagepng($arg);
+          $t = '<img src="data:image/png;base64,';
+        }
+        if($imgOk) {
+          $t .= base64_encode(ob_get_clean()).
             '" '. $attribute .' />';
           if($php_errormsg) {
             $t .= " ".self::esc(strip_tags($php_errormsg));
@@ -679,7 +713,7 @@ class Debug
           $t
           );
       }
-      if($typeInfo === 'resource(gd)') {
+      if(strncmp($typeInfo,'resource(gd)',12) === 0) {
         $recadd .= $t."</td></tr>";
       }
       else {
