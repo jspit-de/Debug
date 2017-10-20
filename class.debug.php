@@ -3,7 +3,7 @@
 	Simple PHP Debug Class
 .---------------------------------------------------------------------------.
 |  Software: Debug - Simple PHP Debug Class                                 |
-|  @Version: 2.0.6                                                          |
+|  @Version: 2.0.7                                                          |
 |      Site: http://jspit.de/?page=debug                                    |
 | ------------------------------------------------------------------------- |
 | Copyright © 2010-2017, Peter Junk (alias jspit). All Rights Reserved.     |
@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Last modify : 2017-10-11
+  Last modify : 2017-10-20
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -42,6 +42,7 @@
   2017-02-08: V2.04 + debug::isOn()
   2017-10-09: V2.05 + meta refresh für html-log
   2017-10-11: V2.06 fix Bug String presentation
+  2017-10-20: V2.07 + opt.par (intern) modifyVarExport 
   
 */
 if (version_compare(PHP_VERSION, '5.3.0', '<') ) exit("Simple PHP Debug Class requires at least PHP version 5.3.0!\n");
@@ -82,7 +83,7 @@ class Debug
 
   */
   
-  const VERSION = "2.0.5";
+  const VERSION = "2.0.7";
   //convert special chars in hex-code
   public static $showSpecialChars = true;           
   //shows the debug info promptly
@@ -524,13 +525,9 @@ class Debug
   */
 
  /*
-  * function returns a string with non-printable characters
-  * are shown in hexadecimal notation \xzz (z = number)
-  * Do not use external
+  * special function modify a string from var_export 
   */ 
-  protected static function str2print($s) {
-    $s = substr($s,0,self::$stringCut);
-    $code = var_export($s,true);
+  protected static function modifyVarExport($code,$addPlaceHolder = true) {
     $code = substr($code,1,-1);  //remove single quotes
     //remove exotic illustration ."\0". from var_export
     $code = str_replace("' . \"\\0\" . '",chr(0),$code);  
@@ -545,13 +542,13 @@ class Debug
     }
     $code = preg_replace_callback(
       $regEx,
-      function($m) {
+      function($m) use ($addPlaceHolder) {
         $hx = '\\x'.implode('\\x',str_split(bin2hex($m[0]),2));
-        return '{~+~}'.$hx.'{~-~}';
+        return $addPlaceHolder ? ('{~+~}'.$hx.'{~-~}') : $hx;
         }, 
       $code
     );
-    return $code;
+    return '"'.$code.'"';
   }
 
   protected static function displayAndLog($argv,$backtrace)
@@ -609,9 +606,17 @@ class Debug
               {
                 foreach($bi['args'] as $arg) {
                   if(is_scalar($arg)) {  //01.08.2014
+                    $param = var_export($arg,true);
+                    if(is_string($arg)) {
+                      $param = self::modifyVarExport($param,false);
+                      if(strlen($param) > 16) {
+                        //cut string parameter fix 16
+                        $param = substr($param,0,16).'.."';
+                      }
+                    }
                     $args .= ($bi[$k] === 'include') 
-                      ? var_export($arg,true) 
-                      :preg_replace('/['.$cutAfterChars.'].*/s','',var_export($arg,true)).", "
+                      ? $param
+                      :preg_replace('/['.$cutAfterChars.'].*/s','',$param).", "
                     ;
                   } 
                   else {
@@ -660,8 +665,12 @@ class Debug
         $t = $arg." [".strtoupper(sprintf("%08x", $arg))."h]";
       }
       elseif(is_string($arg)) {
-        $t = self::$showSpecialChars ? ('"'.self::str2print($arg).'"') : $arg;
-        //$t = $s = preg_replace('~\\\(?!x)~','\\\\\\',$t); //test
+        $t = substr($arg,0,self::$stringCut);
+        $t = var_export($t, true);
+        if(self::$showSpecialChars) {
+          $t = self::modifyVarExport($t);
+        }
+        
       }
       elseif(strncmp($typeInfo,'resource(gd)',12) === 0) {
         $attribute = 'style="'.self::$gdStyle.'"';
@@ -721,10 +730,11 @@ class Debug
         $t = str_replace("' . \"\\0\" . '",chr(0),$t);  //Exot ."\0". entfernen
         //Filter Output
         if(self::$showSpecialChars) $t = preg_replace_callback(
-          "/=> '([^']+)'/",
+          "/=> ('.*'),\n/s",
           'self::cb1',  //'self::cb1'
           $t
           );
+        
       }
       if(strncmp($typeInfo,'resource(gd)',12) === 0) {
         $recadd .= $t."</td></tr>";
@@ -743,7 +753,7 @@ class Debug
   }
   
   protected static function cb1($m){
-    return '=> "'.self::str2print($m[1]).'"';
+    return '=> '.self::modifyVarExport($m[1]).",\n";
   }
   
   protected static function closeLog() {
