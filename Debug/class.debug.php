@@ -3,7 +3,7 @@
 	Simple PHP Debug Class
 .---------------------------------------------------------------------------.
 |  Software: Debug - Simple PHP Debug Class                                 |
-|  @Version: 2.0.7                                                          |
+|  @Version: 2.0.8                                                          |
 |      Site: http://jspit.de/?page=debug                                    |
 | ------------------------------------------------------------------------- |
 | Copyright © 2010-2017, Peter Junk (alias jspit). All Rights Reserved.     |
@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Last modify : 2017-10-20
+  Last modify : 2017-10-24
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -83,7 +83,7 @@ class Debug
 
   */
   
-  const VERSION = "2.0.7";
+  const VERSION = "2.0.8";
   //convert special chars in hex-code
   public static $showSpecialChars = true;           
   //shows the debug info promptly
@@ -730,7 +730,7 @@ class Debug
         $t = str_replace("' . \"\\0\" . '",chr(0),$t);  //Exot ."\0". entfernen
         //Filter Output
         if(self::$showSpecialChars) $t = preg_replace_callback(
-          "/=> ('.*'),\n/s",
+          "/=> ('.*?'),\n/s",
           'self::cb1',  //'self::cb1'
           $t
           );
