@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Last modify : 2017-10-24
+  Last modify : 2017-11-24
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -665,8 +665,9 @@ class Debug
         $t = $arg." [".strtoupper(sprintf("%08x", $arg))."h]";
       }
       elseif(is_string($arg)) {
-        $t = substr($arg,0,self::$stringCut);
+        $t = $arg !== "" ? substr($arg,0,self::$stringCut) : "";  //"" for php < 7.0
         $t = var_export($t, true);
+        
         if(self::$showSpecialChars) {
           $t = self::modifyVarExport($t);
         }
