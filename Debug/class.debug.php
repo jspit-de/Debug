@@ -3,7 +3,7 @@
 	Simple PHP Debug Class
 .---------------------------------------------------------------------------.
 |  Software: Debug - Simple PHP Debug Class                                 |
-|  @Version: 2.0.8                                                          |
+|  @Version: 2.0.9                                                          |
 |      Site: http://jspit.de/?page=debug                                    |
 | ------------------------------------------------------------------------- |
 | Copyright © 2010-2017, Peter Junk (alias jspit). All Rights Reserved.     |
@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Last modify : 2017-11-24
+  Last modify : 2017-11-30
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -45,8 +45,12 @@
   2017-10-20: V2.07 + opt.par (intern) modifyVarExport 
   
 */
-if (version_compare(PHP_VERSION, '5.3.0', '<') ) exit("Simple PHP Debug Class requires at least PHP version 5.3.0!\n");
-if (isset($_SERVER["SCRIPT_NAME"]) && basename($_SERVER["SCRIPT_NAME"])== basename(__FILE__))die();
+if (version_compare(PHP_VERSION, '5.3.0', '<') ) {
+  throw new Exception(htmlspecialchars(
+    "Simple PHP Debug Class requires at least PHP version 5.3.0!",
+    ENT_QUOTES,"UTF-8")
+  );
+}
 if(ini_get('date.timezone') == "") ini_set('date.timezone','UTC');
 
 class Debug
@@ -83,7 +87,7 @@ class Debug
 
   */
   
-  const VERSION = "2.0.8";
+  const VERSION = "2.0.9";
   //convert special chars in hex-code
   public static $showSpecialChars = true;           
   //shows the debug info promptly
@@ -188,7 +192,7 @@ class Debug
     self::$recbuf .= self::recArg($argv,$backtrace);
   }
 
-  /*
+ /*
   * general output for saved and current debug-infos on display or logfile
   */
   public static function write(/** $var1, $var2, .. **/) 
@@ -210,6 +214,19 @@ class Debug
     self::displayAndLog($argv,$backtrace); 
     self::$trHeadStyle = $defaultFormat;    
   }
+  
+ /*
+  * general output for saved and current debug-infos on display or logfile
+  * display text in <pre>-tags
+  */
+  public static function writePre(/** $var1, $var2, .. **/) 
+  {
+    if (!self::$debug_on_off OR !self::$switchOn) return;  //do nothing 
+    $argv = func_get_args();
+    $backtrace = debug_backtrace();
+    self::displayAndLog($argv,$backtrace,array('pre'=>1));  
+  }
+
   
   //get the loginformation from buffer and delete buffer
   //return html-table (up to V1.95 getClean() )
@@ -551,9 +568,9 @@ class Debug
     return '"'.$code.'"';
   }
 
-  protected static function displayAndLog($argv,$backtrace)
+  protected static function displayAndLog($argv,$backtrace,$options=array())
   {
-    self::$recbuf .= self::recArg($argv,$backtrace);  //save current info
+    self::$recbuf .= self::recArg($argv,$backtrace,$options);  //save current info
     if(self::$logfilename == "") 
     { //empty logfilename -> display
       //if (!headers_sent()) header('Content-Type: text/html; charset=UTF-8');
@@ -633,7 +650,10 @@ class Debug
     return $info;
   }
   
-  protected static function recArg($argv, $backtrace) {
+ /*
+  * rec arguments
+  */
+  protected static function recArg($argv, $backtrace, $option = array()) {
     //$btel = array('class','object','type','function');  //'file','args','type'
 
     $recadd = '<table style="'.self::$tableStyle.'">'."\r\n".
@@ -658,20 +678,27 @@ class Debug
     foreach($argv as $k => $arg){
       $recadd .= '<tr><td style="width:'.self::$col1width.';'.self::$tdStyle.'"><b> '.
         $k.'</b></td><td style="width:'.self::$col2width.';'.self::$tdStyle.'">';
-      $pre = is_object($arg) || is_array($arg) ? '<pre style="display:inline">' : "";
+      $pre = is_object($arg) || is_array($arg) || (is_string($arg) && isset($option['pre'])) 
+        ? '<pre style="display:inline">' 
+        : ""
+      ;
       $typeInfo = self::TypeInfo($arg);
       $recadd .= $typeInfo.'</td><td style="'.self::$tdStyle.'">'.$pre;
       if(is_int($arg)) {
         $t = $arg." [".strtoupper(sprintf("%08x", $arg))."h]";
       }
       elseif(is_string($arg)) {
-        $t = $arg !== "" ? substr($arg,0,self::$stringCut) : "";  //"" for php < 7.0
-        $t = var_export($t, true);
-        
-        if(self::$showSpecialChars) {
-          $t = self::modifyVarExport($t);
+        if(empty($option['pre'])) {
+          $t = $arg !== "" ? substr($arg,0,self::$stringCut) : "";  //"" for php < 7.0
+          $t = var_export($t, true);
+          
+          if(self::$showSpecialChars) {
+            $t = self::modifyVarExport($t);
+          }
         }
-        
+        else {
+          $t = $arg;
+        }
       }
       elseif(strncmp($typeInfo,'resource(gd)',12) === 0) {
         $attribute = 'style="'.self::$gdStyle.'"';
