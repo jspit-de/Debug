@@ -3,10 +3,10 @@
 	Simple PHP Debug Class
 .---------------------------------------------------------------------------.
 |  Software: Debug - Simple PHP Debug Class                                 |
-|  @Version: 2.0.9                                                          |
+|  @Version: 2.2.1                                                          |
 |      Site: http://jspit.de/?page=debug                                    |
 | ------------------------------------------------------------------------- |
-| Copyright © 2010-2017, Peter Junk (alias jspit). All Rights Reserved.     |
+| Copyright © 2010-2018, Peter Junk (alias jspit). All Rights Reserved.     |
 | ------------------------------------------------------------------------- |
 |   License: Distributed under the Lesser General Public License (LGPL)     |
 |            http://www.gnu.org/copyleft/lesser.html                        |
@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Last modify : 2017-11-30
+  Last modify : 2018-04-03
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -43,7 +43,9 @@
   2017-10-09: V2.05 + meta refresh für html-log
   2017-10-11: V2.06 fix Bug String presentation
   2017-10-20: V2.07 + opt.par (intern) modifyVarExport 
-  
+  2018-04-03: V2.1 remove small bug PHP 7.2: throw warning TypeInfo 
+  2018-04-04: V2.2 + writeHex
+  2018-06-08: V2.2.1 catch Error *RECURSION*
 */
 if (version_compare(PHP_VERSION, '5.3.0', '<') ) {
   throw new Exception(htmlspecialchars(
@@ -87,7 +89,7 @@ class Debug
 
   */
   
-  const VERSION = "2.0.9";
+  const VERSION = "2.2.0";
   //convert special chars in hex-code
   public static $showSpecialChars = true;           
   //shows the debug info promptly
@@ -227,6 +229,22 @@ class Debug
     self::displayAndLog($argv,$backtrace,array('pre'=>1));  
   }
 
+ /*
+  * display strings as hex
+  */
+  public static function writeHex(/** $var1, $var2, .. **/) 
+  {
+    if (!self::$debug_on_off OR !self::$switchOn) return;  //do nothing 
+    $argv = func_get_args();
+    foreach($argv as $i => $arg){
+      if(is_string($arg)) {
+        $argv[$i] = implode("\r",str_split(self::strhex($arg),64));
+      }      
+    }
+    $backtrace = debug_backtrace();
+    self::displayAndLog($argv,$backtrace,array('pre'=>1));  
+  }
+
   
   //get the loginformation from buffer and delete buffer
   //return html-table (up to V1.95 getClean() )
@@ -329,9 +347,11 @@ class Debug
     }
     if(is_array($obj)) return  $objType."(".count($obj).")";
     if(is_object($obj)) {
-      $objlenght = max(count($obj),count((array)$obj),(property_exists($obj,'length') ? $obj->length : 0));
+      if($obj instanceof Countable) $objlenght = count($obj);
+      elseif($obj instanceof DOMNodeList) $objlenght = $obj->length;
+      else $objlenght = count((array)$obj);
       return $objType."(".get_class($obj).")(".$objlenght.")"; //2013
-      }
+    }
     if(is_resource($obj)) return $objType."(".get_resource_type($obj).")(".(int)$obj.")";
     if((bool)$obj AND var_export($obj,true)==='NULL') {
       //closed Resource
@@ -750,7 +770,10 @@ class Debug
           $arg->formatOutput = true;
           $t = $arg->saveXML();
         }
-
+        elseif (is_array($arg) OR is_object($arg)) {
+          $s = print_r($arg,true);
+          $t = strpos($s," *RECURSION*") ? $s : var_export($arg,true);
+        }
         else {
           $t = var_export($arg,true);
         }  
@@ -814,5 +837,7 @@ class Debug
     $fileName = "log".date("YmdHis")."_".$ms.$extension;
     return $fileName;  
   }
+  
+  
 
 }
