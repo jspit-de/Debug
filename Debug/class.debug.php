@@ -3,7 +3,7 @@
 	Simple PHP Debug Class
 .---------------------------------------------------------------------------.
 |  Software: Debug - Simple PHP Debug Class                                 |
-|  @Version: 2.2.1                                                          |
+|  @Version: 2.2.3                                                          |
 |      Site: http://jspit.de/?page=debug                                    |
 | ------------------------------------------------------------------------- |
 | Copyright © 2010-2018, Peter Junk (alias jspit). All Rights Reserved.     |
@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Last modify : 2018-04-03
+  Date Last modify : 2018-08-20
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -46,6 +46,8 @@
   2018-04-03: V2.1 remove small bug PHP 7.2: throw warning TypeInfo 
   2018-04-04: V2.2 + writeHex
   2018-06-08: V2.2.1 catch Error *RECURSION*
+  2018-06-28: V2.2.2 + deleteLastLogFileSegment()
+  2018-08-20: V2.2.3 List Elements from DomNodeList
 */
 if (version_compare(PHP_VERSION, '5.3.0', '<') ) {
   throw new Exception(htmlspecialchars(
@@ -89,7 +91,7 @@ class Debug
 
   */
   
-  const VERSION = "2.2.0";
+  const VERSION = "2.2.2";
   //convert special chars in hex-code
   public static $showSpecialChars = true;           
   //shows the debug info promptly
@@ -100,9 +102,9 @@ class Debug
   //cut Strings with more than $stringCut chars and $showSpecialChars = true
   public static $stringCut = 180;
 
-  protected static $tableStyle = 'border:1px solid #3C3733;border-collapse:collapse;font:normal 12px Arial; width:98%;text-align:left;margin:2px;'; 
-  protected static $trHeadStyle = 'border:1px solid #3C3733;background-color:#36f;color:#fff';  
-  protected static $tdStyle = 'border:1px solid #3C3733;vertical-align:top;background:#fff;color:#000;';
+  protected static $tableStyle = 'border:1px solid #3C3733;border-collapse:collapse;font:normal 12px Arial; width:98%;margin:2px;'; 
+  protected static $trHeadStyle = 'border:1px solid #3C3733;background-color:#36f;color:#fff;font:normal 12px Arial;text-align:left;';  
+  protected static $tdStyle = 'border:1px solid #3C3733;vertical-align:top;background:#fff;color:#000;text-align:left;font:normal 12px Arial;';
   protected static $col1width = '30px';
   protected static $col2width = '165px';
   //
@@ -122,6 +124,8 @@ class Debug
   //
   protected static $gdStyle = 'max-height:20rem;max-width:20rem;';
   protected static $gdOutputFormat = 'png';
+  //
+  protected static $logMark = "\r\n<span id=newdebuglog>.</span><br>\r\n";
   
   
   /*
@@ -140,7 +144,10 @@ class Debug
       if($OnOff_or_File != "") 
       { // logging part
         $filename = $OnOff_or_File;
-        if( self::$log_file_append = (substr($filename,0,1)=== '+')) $filename = substr($filename,1);
+        if( self::$log_file_append = (substr($filename,0,1)=== '+')) {
+          //append mode
+          $filename = substr($filename,1);
+        }
         if( !self::$log_file_append || !file_exists($filename)) {
           //create a new logfile
           if($filename === "TMP") $filename = self::tmpFileName();
@@ -155,6 +162,9 @@ class Debug
 
           file_put_contents($filename,$content);  
           if((fileperms($filename) & 0666) != 0666) chmod($filename,0666); //+rw all
+        }
+        if(self::$log_file_append) {
+          file_put_contents($filename,self::$logMark,FILE_APPEND);  
         }
         self::$logfilename = $filename;
       }
@@ -542,6 +552,23 @@ class Debug
       self::$logfilename = "";
     }
   }
+
+ /*
+  * Delete last Segment from Logfile
+  * @return bool true if logfile cut, false if not 
+  */  
+  public static function deleteLastLogFileSegment(){
+    if(self::$logfilename != "" AND file_exists(self::$logfilename)) {
+      $logContent = file_get_contents(self::$logfilename);
+      $posLastMark = strrpos($logContent,self::$logMark);
+      if($posLastMark > 1) {
+        file_put_contents(self::$logfilename, substr($logContent,0,$posLastMark)); 
+        return true;
+      }
+    }
+    return false;
+  }
+
   
  /*
   * get the current LogFileName
@@ -678,7 +705,7 @@ class Debug
 
     $recadd = '<table style="'.self::$tableStyle.'">'."\r\n".
       '<tr style="'.self::$trHeadStyle.'">'."\r\n".
-      '<td colspan="3"><b>';
+      '<td style="'.self::$trHeadStyle.'" colspan="3"><b>';
     $microtime_float = microtime(true);
     //times
     $recadd .= " [".date("d.m.Y H:i:s",(int)$microtime_float).",".sprintf("%03d", (int)(fmod($microtime_float,1) * 1000))."]";
@@ -759,10 +786,6 @@ class Debug
         }
         elseif ($arg instanceof DOMElement && true) {
           //neu 19.6.2013
-          //$newdoc = new DOMDocument();
-          //$node = $newdoc->importNode($arg, true);
-          //$newdoc->appendChild($node);
-          //$t = $newdoc->saveXML($node);
           $t = $arg->ownerDocument->saveXML($arg);
         }
         elseif ($arg instanceof DOMDocument && true) {
@@ -770,6 +793,18 @@ class Debug
           $arg->formatOutput = true;
           $t = $arg->saveXML();
         }
+        elseif ($arg instanceof DOMNodeList) {
+          //experimental
+          $t = "array(\r\n";
+                    
+          foreach($arg as $curNode) {
+            $el = "  ";
+            if($curNode instanceof DOMElement) $el .= "DOMElement::";
+            $t .= $el."'".$curNode->ownerDocument->saveXML($curNode)."'\r\n";
+          }
+          $t .= ")";
+        }
+
         elseif (is_array($arg) OR is_object($arg)) {
           $s = print_r($arg,true);
           $t = strpos($s," *RECURSION*") ? $s : var_export($arg,true);
