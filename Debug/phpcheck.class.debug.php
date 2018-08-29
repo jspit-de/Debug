@@ -89,12 +89,25 @@ debug::writePre($sqlString);
 //check if 2 blank spaces in front of 100
 $t->checkOutput('SELECT,  100');   
 
+$t->startOutput('debug::writeHex');
+$string = "012";
+debug::writeHex($string);
+$t->checkOutput('\x30\x31\x32');   
+
 
 //arrays
-$t->startOutput('debug::write Array');
+
+
+$t->startOutput('debug::write array');
 $var = array("a" => 1, "b" => 5.6, "string" => "text");
 debug::write($var);
 $t->checkOutput('array(3)');
+
+$t->startOutput('debug::write Array with Recursion');
+$var = array("a","b");
+$var['c'] = & $var;
+debug::write($var);
+$t->checkOutput('array');
 
 $t->startOutput('debug::write object');
 class data{
@@ -104,6 +117,11 @@ class data{
 $var = new data;
 debug::write($var);
 $t->checkOutput('data::');
+
+$t->startOutput('debug::write object with *RECURSION*');
+$var->c = $var;
+debug::write($var);
+$t->checkOutput('data,RECURSION');
 
 $t->startOutput('debug::write date-time object');
 $date = new DateTime();
@@ -116,13 +134,20 @@ $var = simplexml_load_string($strXml);
 debug::write($var);
 $t->checkOutput('45');
 
-$t->startOutput('debug::write DOM Document');
+$t->startOutput('debug::write DOMDocument');
 $str = "<!DOCTYPE html><div>test3</div>";
 $doc = new DOMDocument();
 $doc->loadHTML($str);
-$var = $doc;
-debug::write($var);
-$t->checkOutput('&lt;div,test3,/div');
+debug::write($doc);
+$t->checkOutput('DOMDocument,&lt;div,test3,/div');
+
+$t->startOutput('debug::write DOMNodeList');
+$str = "<!DOCTYPE html><div>test4</div>";
+$doc = new DOMDocument();
+$doc->loadHTML($str);
+$nodeList = $doc->getElementsByTagName('div');
+debug::write($nodeList);
+$t->checkOutput('DOMNodeList,&lt;div,test4,/div');
 
 $t->startOutput('debug::write resource(gd)');
 $img = imagecreate(100 , 50);
@@ -207,8 +232,7 @@ $t->checkOutput();
 $t->start('microSleep: Sleep number of Mikroseconds');
 $tStart = microtime(true);
 $result = debug::microSleep(10000);
-$tend = (microtime(true) - $tStart) * 1000000;
-$t->checkEqual($result,$tend,'',20); 
+$t->checkEqual($result,10000,'',20); 
 
 $t->startOutput('debug::switchLog - enable');
 //Simulate extern task to enable output
@@ -245,9 +269,32 @@ $t->start('Get 32-bit CRC of String, Object, Array');
 $result = debug::crc('abc');
 $t->checkEqual($result, '2E5A7DD1');
 
-$t->start('Get TypeInfo of Variable');
+$t->start('Get TypeInfo of String Variable');
 $result = debug::TypeInfo('abc');
 $t->checkContains($result, 'string,3');
+
+$t->start('Get TypeInfo of Class Instance');
+$object = (object)array(1,2);
+$result = debug::TypeInfo($object);
+$t->checkEqual($result, 'object(stdClass)(2)');
+
+$t->start('Get TypeInfo of Class implements Countable');
+class counter implements Countable {
+    public function count() {
+       return 17; 
+    }
+}
+$object = new counter();
+$result = debug::TypeInfo($object);
+$t->checkEqual($result, 'object(counter)(17)');
+
+$t->start('Get TypeInfo of DOMNodeList');
+$html ='<li>Text1-1</li><li>Text2-2</li>';
+$doc = new DOMDocument();
+$r = $doc->loadHTML($html);
+$nodelist = $doc -> getElementsByTagName("li");
+$result = debug::TypeInfo($nodelist);
+$t->checkEqual($result, 'object(DOMNodeList)(2)');
 
 $t->start('UniEncode');
 $result = debug::UniEncode('A');
@@ -263,5 +310,6 @@ $t->checkEqual($result, 'A');
 
 // echo $t->getHtmlFooter();
 //output as table
-echo $t->gethtml();
+//echo $t->gethtml();
+echo (empty($_GET) ? $t->gethtml() : $t->getTotalInfo());
 
