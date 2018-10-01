@@ -3,7 +3,7 @@
 	Simple PHP Debug Class
 .---------------------------------------------------------------------------.
 |  Software: Debug - Simple PHP Debug Class                                 |
-|  @Version: 2.2.3                                                          |
+|  @Version: 2.2.5                                                          |
 |      Site: http://jspit.de/?page=debug                                    |
 | ------------------------------------------------------------------------- |
 | Copyright © 2010-2018, Peter Junk (alias jspit). All Rights Reserved.     |
@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Date Last modify : 2018-08-20
+  Date Last modify : 2018-08-30
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -48,6 +48,7 @@
   2018-06-08: V2.2.1 catch Error *RECURSION*
   2018-06-28: V2.2.2 + deleteLastLogFileSegment()
   2018-08-20: V2.2.3 List Elements from DomNodeList
+  2018-10-01: V2.2.5 fix Bug formatOutput Simplexml
 */
 if (version_compare(PHP_VERSION, '5.3.0', '<') ) {
   throw new Exception(htmlspecialchars(
@@ -644,7 +645,7 @@ class Debug
       {
         $fromFile = isset($bi['file']) ? $bi['file'] : '';
         $info .= " ".$bi['class'].$bi['type'].$bi['function'];
-        $info .= ' "'.basename($fromFile).'" Line '.$bi['line'];
+        $info .= ' "'.basename($fromFile).(isset($bi['line']) ? '" Line '.$bi['line'] : '"');
       }
       else
       {
@@ -857,7 +858,10 @@ class Debug
   
   private static function formatOutput($xml) 
   {
-    $xml_str = $xml->saveXML();
+    $xml_str = $xml->asXML();
+    if(strpos($xml_str,"<?") === false) {
+      return $xml;
+    }
     $dom = new DOMDocument();
     $dom->preserveWhiteSpace = false;
     $dom->formatOutput = true;
