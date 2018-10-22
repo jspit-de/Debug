@@ -3,7 +3,7 @@
 	Simple PHP Debug Class
 .---------------------------------------------------------------------------.
 |  Software: Debug - Simple PHP Debug Class                                 |
-|  @Version: 2.2.5                                                          |
+|  @Version: 2.2.7                                                          |
 |      Site: http://jspit.de/?page=debug                                    |
 | ------------------------------------------------------------------------- |
 | Copyright © 2010-2018, Peter Junk (alias jspit). All Rights Reserved.     |
@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Date Last modify : 2018-08-30
+  Date Last modify : 2018-10-22
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -49,6 +49,8 @@
   2018-06-28: V2.2.2 + deleteLastLogFileSegment()
   2018-08-20: V2.2.3 List Elements from DomNodeList
   2018-10-01: V2.2.5 fix Bug formatOutput Simplexml
+  2018-10-09: V2.2.6
+  2018-10-22: V2.2.7 correct String len writeHex
 */
 if (version_compare(PHP_VERSION, '5.3.0', '<') ) {
   throw new Exception(htmlspecialchars(
@@ -92,7 +94,7 @@ class Debug
 
   */
   
-  const VERSION = "2.2.2";
+  const VERSION = "2.2.6";
   //convert special chars in hex-code
   public static $showSpecialChars = true;           
   //shows the debug info promptly
@@ -127,6 +129,8 @@ class Debug
   protected static $gdOutputFormat = 'png';
   //
   protected static $logMark = "\r\n<span id=newdebuglog>.</span><br>\r\n";
+  //
+  protected static $timeStamps = array();
   
   
   /*
@@ -253,7 +257,7 @@ class Debug
       }      
     }
     $backtrace = debug_backtrace();
-    self::displayAndLog($argv,$backtrace,array('pre'=>1));  
+    self::displayAndLog($argv,$backtrace,array('pre'=>1,'hex'=>1));  
   }
 
   
@@ -350,11 +354,13 @@ class Debug
   /*
   * TypeInfo returns a string type of (len,class,resource-typ..)
   */
-  public static function TypeInfo($obj) {
+  public static function TypeInfo($obj, $options = array()) {
     $objType = gettype($obj);
     if(is_string($obj)) {
-      $encoding = (string) self::detect_encoding($obj);
-      return $objType."(".strlen($obj).") ".$encoding;
+      $encoding = self::detect_encoding($obj);
+      $len = strlen($obj);
+      if(isset($options['hex'])) $len = (int)($len/4);
+      return $objType."(".$len.") ".$encoding;
     }
     if(is_array($obj)) return  $objType."(".count($obj).")";
     if(is_object($obj)) {
@@ -420,82 +426,6 @@ class Debug
       return 'ISO-8859-1';
     }
     return false;
-  }
-
- /*
-  * check Performance of a function
-  * param string functionsname, functionsparameter $var1, $var2,
-  * return array of results with name,param,returnvalue,time
-  */
-  public static function checkPerformance($fctName/** $var1, $var2, .. **/){
-    //time empty function
-    $fctDummy = function(){};
-    $microtime_start = microtime(true);
-    $fctDummy();
-    $diff_microsec_dummy = microtime(true)-$microtime_start;
-    //time call_user_func_array with empty function
-    $microtime_start = microtime(true);
-    $r = call_user_func_array($fctDummy,array());
-    $diff_microsec_userfct = microtime(true)-$microtime_start;
-    
-    $argv = func_get_args();
-    array_shift($argv);
-    $microtime_start = microtime(true);
-    $r = call_user_func_array($fctName,$argv);
-    $microtime_end = microtime(true);
-    $diff_microsec = $microtime_end - $microtime_start;
-    $diff_microsec += ($diff_microsec_dummy - $diff_microsec_userfct);
-    
-    if(! is_string($fctName)) $fctName = self::TypeInfo($fctName);
-    return array(
-      "name" => $fctName, 
-      "param" => $argv,
-      "return" => $r,
-      "time" => $diff_microsec,
-    );
-  }
-  
- /*
-  * write check callbackfkt
-  * param string functionsname, functionsparameter $var1, $var2,
-  */
-  public static function wrFctCheck($fctName/** $var1, $var2, .. **/){
-    //check fct
-    $argv = func_get_args();
-    $checkResults = call_user_func_array(array('self','checkPerformance'), $argv);
-
-    $diff_microsec = $checkResults['time'];
-    $vz = "+";
-    if($diff_microsec < 0.0) {
-      $vz = "-";
-      $diff_microsec = 0;
-    }
-    if($diff_microsec >= 1.0) $strDiff = "+". sprintf('%1.3F',$diff_microsec)." s";
-    elseif($diff_microsec >= 0.010) $strDiff = "+".(int)($diff_microsec*1000)." ms";
-    else $strDiff = $vz.sprintf('%1.1F',$diff_microsec*1000000)." µs";
-    
-    array_shift($argv);
-    self::write('call_user_func: '.$checkResults['name'],'param:', $argv, 'return:',$checkResults['return'],'time: '.$strDiff);
-  }
-
-  /*
-   * check Methode
-   */
-  public static function classfct($classInstance,$fctName/** $var1, $var2, .. **/){
-    $argv = func_get_args();
-    array_shift($argv);
-    array_shift($argv);
-    $callBackArr = array($classInstance,$fctName);
-    
-    $microtime_start = microtime(true);
-    $r = call_user_func_array($callBackArr,$argv);
-    $microtime_end = microtime(true);
-    $diff_microsec = $microtime_end-$microtime_start;
-    if($diff_microsec >= 1.0) $strDiff = "[+". sprintf('%1.3F',$diff_microsec)." s]";
-    elseif($diff_microsec >= 0.010) $strDiff = "[+".(int)($diff_microsec*1000)." ms]";
-    else $strDiff = "[+".(int)($diff_microsec*1000000)." µs]";
-    self::write(get_class($classInstance).'->'.$fctName.'(', $argv, 'return:',$r,'Time: '.$strDiff);
-    return $r;
   }
   
   //set a new color for background of title
@@ -584,7 +514,22 @@ class Debug
   public static function isOn(){
     return self::$debug_on_off;
   }
+  
+  //Start stopwatch
+  public static function setTimestamp($index = 0){
+    self::$timeStamps[$index] = microtime(true);  
+  }
 
+  //get Time in µs from start stowatch to now
+  //return int time µs or false if index not valid
+  public static function getTimestampDiff($index = 0){
+    $stop = microtime(true);
+    return isset(self::$timeStamps[$index]) 
+      ? (int)(($stop-self::$timeStamps[$index]) * 1000000)
+      : false;
+  }
+
+  
  /*
   * non public functions
   */
@@ -730,7 +675,7 @@ class Debug
         ? '<pre style="display:inline">' 
         : ""
       ;
-      $typeInfo = self::TypeInfo($arg);
+      $typeInfo = self::TypeInfo($arg, $option);
       $recadd .= $typeInfo.'</td><td style="'.self::$tdStyle.'">'.$pre;
       if(is_int($arg)) {
         $t = $arg." [".strtoupper(sprintf("%08x", $arg))."h]";
@@ -774,6 +719,13 @@ class Debug
           ob_get_clean();
           $t = isset($php_errormsg) ? self::esc(strip_tags($php_errormsg)) : "Error creating image";          
         }
+      }
+      elseif(strncmp($typeInfo,'resource(Socket)',16) === 0 
+        AND function_exists('socket_last_error')
+        AND ($sockLastErr = socket_last_error($arg)) != 0
+      ) {
+          $t = "Error ".$sockLastErr.": ".socket_strerror($sockLastErr);
+          socket_clear_error();
       }
       else {
         if($arg instanceof SimpleXMLElement) {
