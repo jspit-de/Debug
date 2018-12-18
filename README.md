@@ -5,6 +5,13 @@ The outputs are sent to the browser or written in own files.
 
 ## Features
 
+- Shows a lot of information about variables, scalar types and arrays as valid PHP code that can be used for testing
+- Backtrace info (calling function / method / file with line numbers)
+- Time (absolute and different)
+- Memory requirements
+- Global switch for debug on/off
+- Global selection for output to browser or to custom file
+- Independent (Linux,Window, PHP from V5.3.8 up to V7.2)
 
 ## How to use it
 
