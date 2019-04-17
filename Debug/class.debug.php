@@ -96,7 +96,7 @@ class Debug
 
   */
   
-  const VERSION = "2.3";
+  const VERSION = "2.4";
   //convert special chars in hex-code
   public static $showSpecialChars = true;           
   //shows the debug info promptly
