@@ -3,7 +3,7 @@
 	Simple PHP Debug Class
 .---------------------------------------------------------------------------.
 |  Software: Debug - Simple PHP Debug Class                                 |
-|  @Version: 2.2.7                                                          |
+|  @Version: 2.4                                                            |
 |      Site: http://jspit.de/?page=debug                                    |
 | ------------------------------------------------------------------------- |
 | Copyright © 2010-2018, Peter Junk (alias jspit). All Rights Reserved.     |
@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Date Last modify : 2018-10-22
+  Date Last modify : 2019-04-09
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -51,6 +51,8 @@
   2018-10-01: V2.2.5 fix Bug formatOutput Simplexml
   2018-10-09: V2.2.6
   2018-10-22: V2.2.7 correct String len writeHex
+  2018-11-12: V2.3 add writeIf
+  2019-03-20: V2.4 add catch Error
 */
 if (version_compare(PHP_VERSION, '5.3.0', '<') ) {
   throw new Exception(htmlspecialchars(
@@ -94,7 +96,7 @@ class Debug
 
   */
   
-  const VERSION = "2.2.6";
+  const VERSION = "2.3";
   //convert special chars in hex-code
   public static $showSpecialChars = true;           
   //shows the debug info promptly
@@ -143,7 +145,11 @@ class Debug
   */
   public static function log($OnOff_or_File = true, $OnOff_err_log = null) 
   {
-    if(is_bool($OnOff_or_File)) self::$debug_on_off = $OnOff_or_File;  //Argument is true/false
+    if(is_bool($OnOff_or_File)) {
+      //Argument is true/false
+      self::$debug_on_off = $OnOff_or_File; 
+      if(!$OnOff_or_File) @set_error_handler(null);  //PHP < 5.5 no accept null
+    }
     elseif(is_string($OnOff_or_File)) 
     { //LogFile
       if($OnOff_or_File != "") 
@@ -197,6 +203,14 @@ class Debug
     //
     if(self::$lastTime == 0) self::$lastTime = microtime(true);  //save timestamp
   }
+
+ /*
+  * aktivate catch Error and Exceptions
+  */
+  public static function catchError()
+  {
+    register_shutdown_function(array(__CLASS__,'shutDownHandle'), true); 
+  }
   
  /*
   * save the loginformation in a buffer or logfile, no output
@@ -220,12 +234,33 @@ class Debug
     self::displayAndLog($argv,$backtrace);  
   }
   
+ /*
+  * general output for saved and current debug-infos on display or logfile
+  * if $condition == true
+  * if 
+  */
+  public static function writeIf($condition = null/** $var1, $var2, .. **/) 
+  {
+    if (!self::$debug_on_off OR !self::$switchOn) return;  //do nothing
+    if($condition) {    
+      $argv = func_get_args();
+      array_shift($argv);
+      $backtrace = debug_backtrace();
+      self::displayAndLog($argv,$backtrace); 
+    }
+    else {
+      //clear all Debug-Infos from save
+      self::$recbuf = "";  
+    }
+  }
+
+  
   //write with color red
   public static function wrc(/** $var1, $var2, .. **/) 
   {
     if (!self::$debug_on_off  OR !self::$switchOn) return;  //do nothing 
     $defaultFormat = self::$trHeadStyle;
-    self::setTitleColor('#a00');
+    self::setTitleColor('#f44');
     $argv = func_get_args();
     $backtrace = debug_backtrace();
     self::displayAndLog($argv,$backtrace); 
@@ -561,12 +596,13 @@ class Debug
     return '"'.$code.'"';
   }
 
-  protected static function displayAndLog($argv,$backtrace,$options=array())
+  protected static function displayAndLog($argv = null, $backtrace = null,$options=array())
   {
-    self::$recbuf .= self::recArg($argv,$backtrace,$options);  //save current info
+    if($argv !== null){  
+      self::$recbuf .= self::recArg($argv,$backtrace,$options);  //save current info
+    }  
     if(self::$logfilename == "") 
     { //empty logfilename -> display
-      //if (!headers_sent()) header('Content-Type: text/html; charset=UTF-8');
       echo self::$recbuf;
       if(self::$real_time_output) {
          echo (str_repeat(' ',4096))."\r";
@@ -829,6 +865,45 @@ class Debug
     return $fileName;  
   }
   
+ /*
+  * Get a Name for Error-Type
+  * @param int $type
+  * @return string
+  */
+  public static function getErrorTypName($type)
+  {
+    $names = array(
+      E_ERROR   => 'E_ERROR',
+      E_PARSE   => 'E_PARSE',
+      E_WARNING => 'E_WARNING',
+      E_NOTICE  => 'E_NOTICE',
+      E_STRICT => 'E_STRICT',
+      E_USER_ERROR => 'E_USER_ERROR',
+      E_USER_NOTICE => 'E_USER_NOTICE',
+      E_USER_WARNING => 'E_USER_WARNING',
+    );
+    $type = (int)$type;
+    return array_key_exists($type, $names) ? $names[$type] : ("Error ".$type);    
+  }
   
+  public static function shutDownHandle($flag = false)
+  {
+    $errors = error_get_last();
+    if(empty($errors) OR $flag !== true) return;
+    echo '<br>';
+    self::setTitleColor('#f44');
+    $backtrace = array(
+      array(
+        'file' => $errors['file'],
+        'line' => $errors['line'],
+        'class' => "",
+        'type' => "",
+        'function' => "",
+      )
+    );
+    //$backtrace = debug_backtrace();
+    $message = self::getErrorTypName($errors['type'])." :".$errors['message'];
+    self::displayAndLog(array($message),$backtrace); 
+  }
 
 }
