@@ -3,7 +3,7 @@
 	Simple PHP Debug Class
 .---------------------------------------------------------------------------.
 |  Software: Debug - Simple PHP Debug Class                                 |
-|  @Version: 2.4                                                            |
+|  @Version: 2.42                                                           |
 |      Site: http://jspit.de/?page=debug                                    |
 | ------------------------------------------------------------------------- |
 | Copyright © 2010-2018, Peter Junk (alias jspit). All Rights Reserved.     |
@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Date Last modify : 2019-04-09
+  Date Last modify : 2019-05-07
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -107,9 +107,18 @@ class Debug
   //cut Strings with more than $stringCut chars and $showSpecialChars = true
   public static $stringCut = 180;
 
-  protected static $tableStyle = 'border:1px solid #3C3733;border-collapse:collapse;font:normal 12px Arial; width:98%;margin:2px;'; 
-  protected static $trHeadStyle = 'border:1px solid #3C3733;background-color:#36f;color:#fff;font:normal 12px Arial;text-align:left;';  
-  protected static $tdStyle = 'border:1px solid #3C3733;vertical-align:top;background:#fff;color:#000;text-align:left;font:normal 12px Arial;';
+  protected static $tableStyle = '
+    border:1px solid #3C3733;border-collapse:collapse;
+    font:normal 12px Arial; width:98%;margin:2px;
+  '; 
+  protected static $trHeadStyle = '
+    border:1px solid #3C3733;background-color:#36f;
+    color:#fff;font:normal 12px Arial;text-align:left;
+  ';  
+  protected static $tdStyle = '
+    border:1px solid #3C3733;vertical-align:top;background:#fff;color:#000;
+    text-align:left;font:normal 12px Arial;
+  ';
   protected static $col1width = '30px';
   protected static $col2width = '165px';
   //
@@ -127,7 +136,11 @@ class Debug
   //
   protected static $switchOn = true;
   //
-  protected static $gdStyle = 'max-height:20rem;max-width:20rem;';
+  //protected static $gdStyle = 'max-height:20rem;max-width:20rem;background-color:#ee8;';
+  protected static $gdStyle = '
+    max-height:20rem;max-width:20rem;
+    background-image: repeating-linear-gradient(135deg, white , #ccc 6px);
+  ';
   protected static $gdOutputFormat = 'png';
   //
   protected static $logMark = "\r\n<span id=newdebuglog>.</span><br>\r\n";
@@ -620,7 +633,7 @@ class Debug
   {
     $backtraceKeys = array('class','object','type','function');  //'file','args','type'
     $cutAfterChars = ':(';  //strings from arguments and objects cut after this chars 
-    $info = "";
+    $info = ""; 
     foreach($backtrace as $i => $bi) {
       if($i == 0) 
       {
@@ -643,8 +656,8 @@ class Debug
         foreach($backtraceKeys as $k) 
         {
           if(isset($bi[$k])) 
-          {
-            $info .= " ".(is_string($bi[$k]) ? $bi[$k] : '{'.preg_replace('/['.$cutAfterChars.'].*/s','',var_export($bi[$k],true)).'}');
+          { 
+            $info .= " ".(is_string($bi[$k]) ? $bi[$k] : '{'.get_class($bi[$k]).'}');
             if($k == 'function') 
             {
               $args = "(";
