@@ -3,7 +3,7 @@
 	Simple PHP Debug Class
 .---------------------------------------------------------------------------.
 |  Software: Debug - Simple PHP Debug Class                                 |
-|  @Version: 2.42                                                           |
+|  @Version: 2.44                                                           |
 |      Site: http://jspit.de/?page=debug                                    |
 | ------------------------------------------------------------------------- |
 | Copyright © 2010-2018, Peter Junk (alias jspit). All Rights Reserved.     |
@@ -53,6 +53,7 @@
   2018-10-22: V2.2.7 correct String len writeHex
   2018-11-12: V2.3 add writeIf
   2019-03-20: V2.4 add catch Error
+  2019-11-04: v2.44 modify UniEncode -> strToUnicode
 */
 if (version_compare(PHP_VERSION, '5.3.0', '<') ) {
   throw new Exception(htmlspecialchars(
@@ -96,7 +97,7 @@ class Debug
 
   */
   
-  const VERSION = "2.4";
+  const VERSION = "2.44";
   //convert special chars in hex-code
   public static $showSpecialChars = true;           
   //shows the debug info promptly
@@ -139,7 +140,7 @@ class Debug
   //protected static $gdStyle = 'max-height:20rem;max-width:20rem;background-color:#ee8;';
   protected static $gdStyle = '
     max-height:20rem;max-width:20rem;
-    background-image: repeating-linear-gradient(135deg, white , #ccc 6px);
+    background-image: repeating-linear-gradient(-45deg, white , #ccc 6px);
   ';
   protected static $gdOutputFormat = 'png';
   //
@@ -441,14 +442,32 @@ class Debug
     return html_entity_decode($strUplus, ENT_QUOTES, 'UTF-8');
    }
 
-  /*
-   * return Unicode-Format U+20ac for first char of string
-   */
-  public static function UniEncode($char){
-    $char = mb_substr($char,0,1,"UTF-8");
-    $charUTF16 = mb_convert_encoding($char,"UTF-16","UTF-8");
-    return 'U+'.bin2hex($charUTF16);
+ /*
+  * return PHP unicode string Format '\u{20ac}\u{41}' for all multibyte chars of string
+  * for non utf8 chars returns "\xhh"
+  */
+  public static function strToUnicode($string, $showAsciiAsUnicode = false){
+  $len = mb_strlen($string,'UTF-8');
+  $ret = "";
+  for($i=0; $i < $len; $i++){
+    $char = mb_substr($string,$i,1,"UTF-8");
+    if(preg_match('//u',$char)){
+      if($showAsciiAsUnicode OR preg_match('~^[\x21-\x7e]$~',$char) == 0){ 
+        $utf32char = mb_convert_encoding($char,"UTF-32BE","UTF-8");
+        $int32arr = unpack("N",$utf32char);
+        $ret .= '\u{'.dechex($int32arr[1]).'}';
+      }
+      else {
+        $ret .= $char;
+      }
+    }
+    else {
+      //char may contain >1 byte
+      $ret .= self::strhex($char);
+    }
   }
+  return $ret;
+}
    
   /*
    * tries to determine the charset of string

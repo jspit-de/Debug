@@ -1,31 +1,32 @@
 <?php
 //error_reporting(-1);  //dev
-//last update 2017-10-20
+//last update 2018-10-20
 error_reporting(E_ALL ^ (E_WARNING | E_USER_WARNING));
 ini_set('display_errors', 1);
 header('Content-Type: text/html; charset=UTF-8');
 
-require __DIR__.'/../class/class.debug.php';
+
 require __DIR__.'/../class/phpcheck.php';
 $t = new PHPcheck();
+$t->setOutputOnlyErrors(!empty($_GET['error']));
 //Reset Filter to enable html output
 $t->setResultFilter("html");
 //Outputvariante Form
 //$t->setOutputVariant("Form");
 
-//echo $t->getHtmlHeader('phpcheck class.debug');
+$t->start('include class debug');
+require __DIR__.'/../class/class.debug.php';
+$t->checkEqual(class_exists('debug'), true);
+
 //version
 $t->start('check versions info');
 $info = $t->getClassVersion("debug");
-$t->check($info, !empty($info));
+$t->check($info, $info >= 2.44);
 
 $t->startOutput('debug::write integer');
 $var = 1;
 debug::write($var);
 $t->checkOutput('Line '.(__LINE__-1).',integer,1h');
-//echo $t->getTable();
-//echo $results['result'];
-
 
 $t->startOutput('debug::write float');
 $var = 1.1;
@@ -46,6 +47,23 @@ $t->startOutput('debug::write UTF8 string');
 $var = "Umlaute äöü";
 debug::write($var);
 $t->checkOutput('string(14),UTF,äöü');
+
+$t->startOutput('debug::write UTF-8mb3');
+$var = "1€";
+debug::write($var);
+$t->checkOutput('UTF-8mb3,1€');
+
+$t->startOutput('debug::write ISO-String');
+$string = "text mit Umlauten äöü";
+$iso = mb_convert_encoding($string,"ISO-8859-1","UTF8");
+debug::write($iso);
+$t->checkOutput('ISO-8859-1');
+
+$t->startOutput('debug::write CP1252-String');
+$utf8 = "text mit Umlauten äöü und € Symbol";
+$str = mb_convert_encoding($utf8,"CP1252","UTF8");
+debug::write($str);
+$t->checkOutput('CP1252');
 
 $t->startOutput('debug::write Binary String');
 $var = chr(0x7F).chr(3)."\t\r\n";
@@ -92,8 +110,20 @@ $t->checkOutput('SELECT,  100');
 $t->startOutput('debug::writeHex');
 $string = "012";
 debug::writeHex($string);
-$t->checkOutput('\x30\x31\x32');   
+$t->checkOutput('\x30\x31\x32');
 
+$t->startOutput('debug::writeIf: false'); 
+debug::save('first Info');
+//with condition==false save-Info will be remove
+$condition = false;
+debug::writeIf($condition,'second Info');
+$t->checkEqual($t->getOutput(), "");
+
+$t->startOutput('debug::writeIf: true'); 
+debug::save('1.Info');
+$condition = true;
+debug::writeIf($condition,'2.Info');
+$t->checkOutput("save,1.Info,write,2.Info");
 
 //arrays
 
@@ -129,10 +159,14 @@ debug::write($date);
 $t->checkOutput(array('date',date("Y-m-d")));
 
 $t->startOutput('debug::write Simple XML');
-$strXml = "<root><div>45</div></root>";
-$var = simplexml_load_string($strXml);
-debug::write($var);
-$t->checkOutput('45');
+$strXml = '<root><div attr="abc">45</div></root>';
+$xml = simplexml_load_string($strXml);
+debug::write($xml);
+$t->checkOutput('abc,45');
+
+$t->startOutput('debug::write Simple XML attributes');
+debug::write($xml->div->attributes());
+$t->checkOutput('abc');
 
 $t->startOutput('debug::write DOMDocument');
 $str = "<!DOCTYPE html><div>test3</div>";
@@ -149,9 +183,47 @@ $nodeList = $doc->getElementsByTagName('div');
 debug::write($nodeList);
 $t->checkOutput('DOMNodeList,&lt;div,test4,/div');
 
+if(function_exists('socket_create')) {
+//
+$t->startOutput('debug::write resource(sock)');
+$sock = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
+debug::write($sock);
+$t->checkOutput('resource');
+}
+
+//Test grafic resourcen
 $t->startOutput('debug::write resource(gd)');
 $img = imagecreate(100 , 50);
 ImageColorAllocate($img, 0, 255, 0);
+debug::write($img);
+$t->checkOutput('resource(gd)');
+
+$t->startOutput('debug::write resource(gd) with error');
+$img = imagecreate(50 , 50);
+debug::write($img);
+$t->checkOutput('resource(gd)');
+
+$t->startOutput('debug::write truecolor resource gd');
+$img = imagecreatetruecolor(50 , 50); 
+$green = ImageColorAllocate($img, 0, 255, 0);
+$blue = imagecolorallocate($img, 0, 0, 255);
+imagefill($img, 0, 0, $green);
+imagefilledrectangle($img, 10, 10, 40,40, $blue);
+debug::write($img);
+$t->checkOutput('resource(gd)');
+
+
+$t->startOutput('debug::write gd with transparent');
+imagecolortransparent($img, $blue);
+debug::write($img);
+$t->checkOutput('resource(gd)');
+
+$t->startOutput('setImgStyle new background');
+debug::setImgStyle('
+  max-height:20rem;
+  max-width:20rem;
+  background-image: repeating-linear-gradient(-45deg, white, #88f 6px);
+');
 debug::write($img);
 $t->checkOutput('resource(gd)');
 
@@ -178,11 +250,6 @@ $testFct2 = function ($par1,$par2) {
 };
 $testFct2("text\r\n",95);
 $t->checkOutput('closure,text,95');
-
-$t->startOutput('debug::write resource(gd) with error');
-$img = imagecreate(50 , 50);
-debug::write($img);
-$t->checkOutput('resource(gd)');
 
 $t->startOutput('debug::save ');
 debug::save("Save into buffer, Output with next write");
@@ -229,10 +296,15 @@ $t->startOutput('systeminfo');
 debug::systeminfo();
 $t->checkOutput();
 
-$t->start('microSleep: Sleep number of Mikroseconds');
-$tStart = microtime(true);
-$result = debug::microSleep(10000);
-$t->checkEqual($result,10000,'',20); 
+$t->start('set and get timestamps');
+debug::setTimestamp(0);
+debug::microSleep(10000);
+$result = debug::getTimestampDiff(0);
+$t->check($result,$result-10000 < 100); 
+
+$t->start('get diff timestamp');
+$result = debug::getTimestampDiff(0);
+$t->check($result,$result>10000);
 
 $t->startOutput('debug::switchLog - enable');
 //Simulate extern task to enable output
@@ -296,9 +368,17 @@ $nodelist = $doc -> getElementsByTagName("li");
 $result = debug::TypeInfo($nodelist);
 $t->checkEqual($result, 'object(DOMNodeList)(2)');
 
-$t->start('UniEncode');
-$result = debug::UniEncode('A');
-$t->checkEqual($result, 'U+0041');
+$t->start('strToUnicode');
+$result = debug::strToUnicode('A');
+$t->checkEqual($result, 'A');
+
+$t->start('strToUnicode all chars to Unicode');
+$result = debug::strToUnicode('A',true);
+$t->checkEqual($result, '\u{41}');
+
+$t->start('strToUnicode');
+$result = debug::strToUnicode("ä\x80𑚀€");
+$t->checkEqual($result, '\u{e4}\x80\u{11680}\u{20ac}');
 
 $t->start('UniDecode');
 $result = debug::UniDecode('U+0041');
@@ -311,5 +391,5 @@ $t->checkEqual($result, 'A');
 // echo $t->getHtmlFooter();
 //output as table
 //echo $t->gethtml();
-echo (empty($_GET) ? $t->gethtml() : $t->getTotalInfo());
+echo $t->gethtml();
 
