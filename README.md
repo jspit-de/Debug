@@ -54,11 +54,12 @@ http://jspit.de/check/phpcheck.class.debug.php
 | Info | Value |
 | :--- | :---- |
 | Declaration | class Debug |
-| File | class.debug.php |
-| Date/Time modify File | 2019-04-17 08:48:19 |
-| File-Size | 31 KByte |
-| Version | 2.4 (const VERSION = 2.4) |
-| Date | 2019-04-09 |
+| Datei | class.debug.php |
+| Date/Time modify File | 2019-11-07 07:29:59 |
+| File-Size | 32 KByte |
+| MD5 File | e904e765791cee5ec4ef139f95b7c131 |
+| Version | 2.44 (const VERSION = 2.44) |
+| Date | 2019-11-07 |
 
 ## Public Methods
 
@@ -82,7 +83,7 @@ http://jspit.de/check/phpcheck.class.debug.php
 | public static function TypeInfo($obj, $options = array()) | TypeInfo returns a string type of (len,class,resource-typ..) |
 | public static function strhex($s) | return a string as hexadecimal like &#039;\x61\x62..&#039; |
 | public static function UniDecode($strUplus) | return char for Unicode-Format U+20ac (U+0000..U+3FFF) |
-| public static function UniEncode($char) | return Unicode-Format U+20ac for first char of string |
+| public static function strToUnicode($string, $showAsciiAsUnicode = false) | return PHP unicode string Format &#039;\u{20ac}\u{41}&#039; for all multibyte chars of string<br>for non utf8 chars returns &quot;\xhh&quot; |
 | public static function detect_encoding($string) | tries to determine the charset of string<br>return p.E. &#039;UTF-8&#039;,&#039;UTF-8 BOM&#039;,&#039;ISO-8859-1&#039;,&#039;ASCII&#039; <br>faster as mb_detect_encoding($string,&#039;ASCII, UTF-8, ISO-8859-1&#039;,true); |
 | public static function setTitleColor($backgroundColor) | set a new color for background of title |
 | public static function setImgStyle($style) | set style for gd-resource |
@@ -96,6 +97,7 @@ http://jspit.de/check/phpcheck.class.debug.php
 | public static function getTimestampDiff($index = 0) | get Time in µs from start stowatch to now<br>return int time µs or false if index not valid |
 | public static function getErrorTypName($type) | Get a Name for Error-Type<br>@param int $type<br>@return string |
 | public static function shutDownHandle($flag = false) |  |
+
 
 ## Public Propertys
 
@@ -111,4 +113,3 @@ http://jspit.de/check/phpcheck.class.debug.php
 | Declaration/Name | Value | Description/Comments |
 | :--------------- | :---- | :------------------- |
 |  const VERSION = &quot;2.4&quot;; | &#039;2.4&#039; |   |
-
