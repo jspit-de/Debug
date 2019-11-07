@@ -1,6 +1,6 @@
 <?php
 //error_reporting(-1);  //dev
-//last update 2018-10-20
+//last update 2019-11-31
 error_reporting(E_ALL ^ (E_WARNING | E_USER_WARNING));
 ini_set('display_errors', 1);
 header('Content-Type: text/html; charset=UTF-8');
@@ -375,6 +375,10 @@ $t->checkEqual($result, 'A');
 $t->start('strToUnicode all chars to Unicode');
 $result = debug::strToUnicode('A',true);
 $t->checkEqual($result, '\u{41}');
+
+$t->start('strToUnicode with " ans space');
+$result = debug::strToUnicode(' !"#A~');
+$t->checkEqual($result, '\u{20}!\u{22}#A~');
 
 $t->start('strToUnicode');
 $result = debug::strToUnicode("ä\x80𑚀€");

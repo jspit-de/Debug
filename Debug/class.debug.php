@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Date Last modify : 2019-05-07
+  Date Last modify : 2019-11-07
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -447,12 +447,10 @@ class Debug
   * for non utf8 chars returns "\xhh"
   */
   public static function strToUnicode($string, $showAsciiAsUnicode = false){
-  $len = mb_strlen($string,'UTF-8');
   $ret = "";
-  for($i=0; $i < $len; $i++){
-    $char = mb_substr($string,$i,1,"UTF-8");
+  for($i=0; ($char = mb_substr($string,$i,1,"UTF-8")) != "";$i++){ 
     if(preg_match('//u',$char)){
-      if($showAsciiAsUnicode OR preg_match('~^[\x21-\x7e]$~',$char) == 0){ 
+      if($showAsciiAsUnicode OR preg_match('~^[\x21\x23-\x7e]$~',$char) == 0){ 
         $utf32char = mb_convert_encoding($char,"UTF-32BE","UTF-8");
         $int32arr = unpack("N",$utf32char);
         $ret .= '\u{'.dechex($int32arr[1]).'}';
