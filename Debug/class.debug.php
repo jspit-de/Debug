@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Date Last modify : 2019-11-07
+  Date Last modify : 2019-11-08
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -447,25 +447,35 @@ class Debug
   * for non utf8 chars returns "\xhh"
   */
   public static function strToUnicode($string, $showAsciiAsUnicode = false){
-  $ret = "";
-  for($i=0; ($char = mb_substr($string,$i,1,"UTF-8")) != "";$i++){ 
-    if(preg_match('//u',$char)){
-      if($showAsciiAsUnicode OR preg_match('~^[\x21\x23-\x7e]$~',$char) == 0){ 
-        $utf32char = mb_convert_encoding($char,"UTF-32BE","UTF-8");
-        $int32arr = unpack("N",$utf32char);
-        $ret .= '\u{'.dechex($int32arr[1]).'}';
+    $ret = "";
+    $bytePos = 0;
+    while(true){
+      $string = substr($string,$bytePos);
+      if($string == "") break;
+      $char = mb_substr($string,0,1,"UTF-8");
+      if(preg_match('//u',$char)){
+        $bytePos = strlen($char);
+        $ret .= self::charToUnicode($char, $showAsciiAsUnicode);
       }
       else {
-        $ret .= $char;
+        //char may contain >1 byte
+        $bytePos = 1; 
+        $ret .= '\x'.sprintf("%2x",ord($char));
       }
     }
-    else {
-      //char may contain >1 byte
-      $ret .= self::strhex($char);
-    }
+    return $ret;
   }
-  return $ret;
-}
+  
+  //used from strToUnicode
+  private static function charToUnicode($char, $showAsciiAsUnicode = false){
+    if($showAsciiAsUnicode OR preg_match('~^[\x21\x23-\x7e]$~',$char) == 0){ 
+      $utf32char = mb_convert_encoding($char,"UTF-32BE","UTF-8");
+      $int32arr = unpack("N",$utf32char);
+      return '\u{'.dechex($int32arr[1]).'}';
+    }
+    //printable ASCII
+    return $char;
+  }
    
   /*
    * tries to determine the charset of string
