@@ -3,7 +3,7 @@
 	Simple PHP Debug Class
 .---------------------------------------------------------------------------.
 |  Software: Debug - Simple PHP Debug Class                                 |
-|  @Version: 2.44                                                           |
+|  @Version: 2.46                                                           |
 |      Site: http://jspit.de/?page=debug                                    |
 | ------------------------------------------------------------------------- |
 | Copyright © 2010-2018, Peter Junk (alias jspit). All Rights Reserved.     |
@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Date Last modify : 2019-11-08
+  Date Last modify : 2019-12-10
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -54,6 +54,8 @@
   2018-11-12: V2.3 add writeIf
   2019-03-20: V2.4 add catch Error
   2019-11-04: v2.44 modify UniEncode -> strToUnicode
+  2019-11-21: v2.45 add unicodeToString
+  2019-12-10: v2.46 add writeUni
 */
 if (version_compare(PHP_VERSION, '5.3.0', '<') ) {
   throw new Exception(htmlspecialchars(
@@ -66,7 +68,6 @@ if(ini_get('date.timezone') == "") ini_set('date.timezone','UTC');
 class Debug
 {
   /*
-   
   From the Simple Debug Class you get timestamp, backtrace-info and var-info's in table view
   on display or in a logfile. The methods write, save and stop accepts a variable number of parameters.
   It is very easy to use. Some examples:
@@ -97,7 +98,7 @@ class Debug
 
   */
   
-  const VERSION = "2.44";
+  const VERSION = "2.46";
   //convert special chars in hex-code
   public static $showSpecialChars = true;           
   //shows the debug info promptly
@@ -300,15 +301,21 @@ class Debug
   {
     if (!self::$debug_on_off OR !self::$switchOn) return;  //do nothing 
     $argv = func_get_args();
-    foreach($argv as $i => $arg){
-      if(is_string($arg)) {
-        $argv[$i] = implode("\r",str_split(self::strhex($arg),64));
-      }      
-    }
     $backtrace = debug_backtrace();
     self::displayAndLog($argv,$backtrace,array('pre'=>1,'hex'=>1));  
   }
 
+ /*
+  * display strings with unicode characters as \u{fc}
+  */
+  public static function writeUni(/** $var1, $var2, .. **/) 
+  {
+    if (!self::$debug_on_off OR !self::$switchOn) return;  //do nothing 
+    $argv = func_get_args();
+    $backtrace = debug_backtrace();
+    self::displayAndLog($argv,$backtrace,array('pre' => 1,'uni'=>1));  
+  }
+  
   
   //get the loginformation from buffer and delete buffer
   //return html-table (up to V1.95 getClean() )
@@ -406,9 +413,8 @@ class Debug
   public static function TypeInfo($obj, $options = array()) {
     $objType = gettype($obj);
     if(is_string($obj)) {
-      $encoding = self::detect_encoding($obj);
       $len = strlen($obj);
-      if(isset($options['hex'])) $len = (int)($len/4);
+      $encoding = self::detect_encoding($obj);
       return $objType."(".$len.") ".$encoding;
     }
     if(is_array($obj)) return  $objType."(".count($obj).")";
@@ -442,39 +448,65 @@ class Debug
     return html_entity_decode($strUplus, ENT_QUOTES, 'UTF-8');
    }
 
+
  /*
-  * return PHP unicode string Format '\u{20ac}\u{41}' for all multibyte chars of string
+  * return PHP unicode string Format '\u{20ac}\A' for all multibyte chars of string
   * for non utf8 chars returns "\xhh"
   */
-  public static function strToUnicode($string, $showAsciiAsUnicode = false){
+  public static function strToUnicode($string){
     $ret = "";
     $bytePos = 0;
     while(true){
       $string = substr($string,$bytePos);
       if($string == "") break;
-      $char = mb_substr($string,0,1,"UTF-8");
-      if(preg_match('//u',$char)){
-        $bytePos = strlen($char);
-        $ret .= self::charToUnicode($char, $showAsciiAsUnicode);
+      $char = self::firstChar($string);
+      $bytePos = strlen($char);
+      if($bytePos == 1){
+        if(preg_match('~^[\x21\x23-\x7e]$~',$char)) $ret .= $char;
+        else $ret .= '\x'.sprintf("%02x",ord($char));
       }
       else {
-        //char may contain >1 byte
-        $bytePos = 1; 
-        $ret .= '\x'.sprintf("%2x",ord($char));
+        //multibyte
+        $utf32char = mb_convert_encoding($char,"UTF-32BE","UTF-8");
+        $int32arr = unpack("N",$utf32char);
+        $ret .= '\u{'.dechex($int32arr[1]).'}';
       }
     }
     return $ret;
   }
   
-  //used from strToUnicode
-  private static function charToUnicode($char, $showAsciiAsUnicode = false){
-    if($showAsciiAsUnicode OR preg_match('~^[\x21\x23-\x7e]$~',$char) == 0){ 
-      $utf32char = mb_convert_encoding($char,"UTF-32BE","UTF-8");
-      $int32arr = unpack("N",$utf32char);
-      return '\u{'.dechex($int32arr[1]).'}';
-    }
-    //printable ASCII
-    return $char;
+ /*
+  * get first utf-8 multibyte char or first byte
+  * @param string input: valid or invalid utf-8 string
+  * @return string, bool false if error (for string = "")
+  */  
+  public static function firstChar($string){
+    $ok = preg_match('/
+      ^[\xF0-\xF7][\x80-\xBF][\x80-\xBF][\x80-\xBF]
+      |^[\xE0-\xEF][\x80-\xBF][\x80-\xBF]
+      |^[\xC0-\xDF][\x80-\xBF]
+      |^./sx',
+      $string,
+      $match);
+    return $ok ? $match[0] : false;      
+  }
+
+ /*
+  * convert a string with unicode \u{30} or hex code \x30 to string
+  * @param string $string
+  * @return string
+  * example: debug::unicodeToString("a\x42\u{e4}\u{20ac}") -> "aBä€"
+  */
+  public static function unicodeToString($string){
+    return preg_replace_callback(
+      '#\\\\(x)([[:xdigit:]]{2})|\\\\u{([[:xdigit:]]{1,5})}#ism',
+      function($matches)
+        {
+          if($matches[1] == 'x') return chr(hexdec($matches[2]));
+          return mb_convert_encoding(pack("N",hexdec($matches[3])),"UTF-8","UTF-32BE");
+        },
+      $string
+    );
   }
    
   /*
@@ -484,7 +516,8 @@ class Debug
    */
   public static function detect_encoding($string) {
     if( preg_match("/^\xEF\xBB\xBF/",$string)) return 'UTF-8 BOM';
-    if( preg_match("//u", $string)) {
+    if( preg_match("//u", $string)) { 
+      //valid UTF-8
       if( preg_match("/[\xf0-\xf7][\x80-\xbf][\x80-\xbf][\x80-\xbf]/",$string)) return 'UTF-8mb4';
       if( preg_match("/[\xe0-\xef][\x80-\xbf][\x80-\xbf]/",$string)) return 'UTF-8mb3';
       if( preg_match("/[\x80-\xff]/",$string)) return 'UTF-8';
@@ -721,6 +754,9 @@ class Debug
   
  /*
   * rec arguments
+  * option 'pre'=>1 im pre-style
+  * option 'hex' => 1 
+  * option 'uni' => 1 (writeUni)  
   */
   protected static function recArg($argv, $backtrace, $option = array()) {
     //$btel = array('class','object','type','function');  //'file','args','type'
@@ -757,6 +793,12 @@ class Debug
         $t = $arg." [".strtoupper(sprintf("%08x", $arg))."h]";
       }
       elseif(is_string($arg)) {
+        if(isset($option['hex'])) {
+          $arg = implode("\r",str_split(self::strhex($arg),64));
+        }
+        elseif(isset($option['uni'])){
+          $arg = self::strToUnicode($arg);
+        }
         if(empty($option['pre'])) {
           $t = $arg !== "" ? substr($arg,0,self::$stringCut) : "";  //"" for php < 7.0
           $t = var_export($t, true);
