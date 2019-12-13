@@ -3,7 +3,7 @@
 	Simple PHP Debug Class
 .---------------------------------------------------------------------------.
 |  Software: Debug - Simple PHP Debug Class                                 |
-|  @Version: 2.46                                                           |
+|  @Version: 2.47                                                           |
 |      Site: http://jspit.de/?page=debug                                    |
 | ------------------------------------------------------------------------- |
 | Copyright © 2010-2018, Peter Junk (alias jspit). All Rights Reserved.     |
@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Date Last modify : 2019-12-10
+  Date Last modify : 2019-12-12
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -56,6 +56,7 @@
   2019-11-04: v2.44 modify UniEncode -> strToUnicode
   2019-11-21: v2.45 add unicodeToString
   2019-12-10: v2.46 add writeUni
+  2019-12-12: V2.47 add headerInfo(), isHeaderSent()
 */
 if (version_compare(PHP_VERSION, '5.3.0', '<') ) {
   throw new Exception(htmlspecialchars(
@@ -98,7 +99,7 @@ class Debug
 
   */
   
-  const VERSION = "2.46";
+  const VERSION = "2.47";
   //convert special chars in hex-code
   public static $showSpecialChars = true;           
   //shows the debug info promptly
@@ -636,6 +637,34 @@ class Debug
       ? (int)(($stop-self::$timeStamps[$index]) * 1000000)
       : false;
   }
+  
+ /* 
+  * get Infos for headers sent
+  * return array (
+     'headerSent' => false,
+     'fileName' => "",
+     'line' => 0,
+     'output_buffering' => "",
+     'bytes output buffer' => false,
+    )
+  */
+  public static function headerInfo() {
+    $sent = headers_sent($fileName, $line);
+    return array(
+      'headerSent' => $sent,
+      'fileName'   => $fileName,
+      'line'       => $line,
+      'output_buffering' => ini_get('output_buffering'),
+      'bytes output buffer' => ob_get_length(),
+      'headers' => headers_list(),
+    );
+      
+  }  
+  
+  //is header sent
+  public static function isHeaderSent() {
+    return headers_sent(); 
+  }  
 
   
  /*
