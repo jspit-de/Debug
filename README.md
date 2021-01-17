@@ -9,10 +9,10 @@ The outputs are sent to the browser or written in own files.
 - Backtrace info (calling function / method / file with line numbers)
 - Time (absolute and relative)
 - Memory requirements
-- Displays preview images for resources of the type gd
-- Global switch for debug on/off
-- Global selection for output to browser or to custom file
-- Independent (Linux,Window, PHP from V5.3.8 up to V7.2)
+- Shows preview images for resources of the type gd
+- Output to all web browsers without plugins
+- Logging to a custom file
+- Independent (Linux,Window, PHP from V5.6 up to V7.x)
 
 ## How to use it
 
