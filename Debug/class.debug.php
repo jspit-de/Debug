@@ -3,7 +3,7 @@
 	Simple PHP Debug Class
 .---------------------------------------------------------------------------.
 |  Software: Debug - Simple PHP Debug Class                                 |
-|  @Version: 2.47                                                           |
+|  @Version: 2.51                                                           |
 |      Site: http://jspit.de/?page=debug                                    |
 | ------------------------------------------------------------------------- |
 | Copyright © 2010-2018, Peter Junk (alias jspit). All Rights Reserved.     |
@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Date Last modify : 2019-12-12
+  Date Last modify : 2021-11-21
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -57,10 +57,14 @@
   2019-11-21: v2.45 add unicodeToString
   2019-12-10: v2.46 add writeUni
   2019-12-12: V2.47 add headerInfo(), isHeaderSent()
+  2020-02-09: V2.48 add object-Id to typeinfo (PHP >= 7.2)
+  2020-07-15: V2.49 modify writeHex, PHP > 5.5
+  2021-01-27: V2.50 modify modifyVarExport
+  2021-08-12: V2.51 modify recArg error handling gd
 */
-if (version_compare(PHP_VERSION, '5.3.0', '<') ) {
+if (version_compare(PHP_VERSION, '5.5.0', '<') ) {
   throw new Exception(htmlspecialchars(
-    "Simple PHP Debug Class requires at least PHP version 5.3.0!",
+    "Simple PHP Debug Class requires at least PHP version 5.5.0!",
     ENT_QUOTES,"UTF-8")
   );
 }
@@ -99,7 +103,7 @@ class Debug
 
   */
   
-  const VERSION = "2.47";
+  const VERSION = "2.51";
   //convert special chars in hex-code
   public static $showSpecialChars = true;           
   //shows the debug info promptly
@@ -423,7 +427,11 @@ class Debug
       if($obj instanceof Countable) $objlenght = count($obj);
       elseif($obj instanceof DOMNodeList) $objlenght = $obj->length;
       else $objlenght = count((array)$obj);
-      return $objType."(".get_class($obj).")(".$objlenght.")"; //2013
+      $objectId = function_exists('spl_object_id') 
+        ? "#".spl_object_id($obj)
+        : ""
+      ; 
+      return $objType."(".get_class($obj).")".$objectId." (".$objlenght.")"; //2013
     }
     if(is_resource($obj)) return $objType."(".get_resource_type($obj).")(".(int)$obj.")";
     if((bool)$obj AND var_export($obj,true)==='NULL') {
@@ -674,18 +682,23 @@ class Debug
  /*
   * special function modify a string from var_export 
   */ 
-  protected static function modifyVarExport($code,$addPlaceHolder = true) {
+  protected static function modifyVarExport($code,$addPlaceHolder = true, $options = []) {
     $code = substr($code,1,-1);  //remove single quotes
     //remove exotic illustration ."\0". from var_export
     $code = str_replace("' . \"\\0\" . '",chr(0),$code);  
     $search = array("\\'",'"',"\r","\n","\t");
     $replace = array("'",'\"','\r','\n','\t',);
     $code = str_replace($search, $replace, $code);
-    if(preg_match("//u",$code)) {
-      $regEx = '/[\p{C}]/usS';
+    if(isset($options['hex'])) {
+      $regEx = '/[\x00-\xff]/sS';
     }
     else {
-      $regEx = '/[\x00-\x1f\x7f-\xff]/sS';
+      if(preg_match("//u",$code)) {
+        $regEx = '/[\p{C}]/usS';
+      }
+      else {
+        $regEx = '/[\x00-\x1f\x7f-\xff]/sS';
+      }
     }
     $code = preg_replace_callback(
       $regEx,
@@ -695,6 +708,7 @@ class Debug
         }, 
       $code
     );
+    $code = preg_replace('~ (?= )~',"\\x20",$code); //more as 2 spaces to \x20
     return '"'.$code.'"';
   }
 
@@ -708,8 +722,8 @@ class Debug
       echo self::$recbuf;
       if(self::$real_time_output) {
          echo (str_repeat(' ',4096))."\r";
+         flush();
       }
-      flush();
     }
     else 
     { //write logfile
@@ -722,7 +736,7 @@ class Debug
   {
     $backtraceKeys = array('class','object','type','function');  //'file','args','type'
     $cutAfterChars = ':(';  //strings from arguments and objects cut after this chars 
-    $info = ""; 
+    $fromFile = $info = ""; 
     foreach($backtrace as $i => $bi) {
       if($i == 0) 
       {
@@ -843,7 +857,6 @@ class Debug
       elseif(strncmp($typeInfo,'resource(gd)',12) === 0) {
         $attribute = 'style="'.self::$gdStyle.'"';
         ob_start();
-        $php_errormsg = "";
         if(self::$gdOutputFormat == 'jpg') {
           $imgOk = @imagejpeg($arg,NULL,85);
           $t = '<img src="data:image/jpeg;base64,';
@@ -855,17 +868,17 @@ class Debug
         if($imgOk) {
           $t .= base64_encode(ob_get_clean()).
             '" '. $attribute .' />';
-          if($php_errormsg) {
-            $t .= " ".self::esc(strip_tags($php_errormsg));
-          }
-          else {
-            $t .= " ".imagesx($arg)." x ".imagesy($arg)." px";  
-          }
+          $t .= " ".imagesx($arg)." x ".imagesy($arg)." px";  
         }
         else {
           ob_get_clean();
-          $t = isset($php_errormsg) ? self::esc(strip_tags($php_errormsg)) : "Error creating image";          
+          $t = "Error creating image";          
         }
+        if($errorArr = error_get_last()){
+          $t .= ' (Error '.$errorArr['message'].')';
+          error_clear_last();
+        }
+
       }
       elseif(strncmp($typeInfo,'resource(Socket)',16) === 0 
         AND function_exists('socket_last_error')
@@ -915,12 +928,15 @@ class Debug
         $t = str_ireplace('stdClass::__set_state','(object)',$t);  //ab V1.8
         $t = str_replace("' . \"\\0\" . '",chr(0),$t);  //Exot ."\0". entfernen
         //Filter Output
-        if(self::$showSpecialChars) $t = preg_replace_callback(
-          "/=> ('.*?'),\n/s",
-          'self::cb1',  //'self::cb1'
-          $t
+        if(self::$showSpecialChars) {
+          $t = preg_replace_callback(
+            "/=> ('.*?'),\n/s",
+            function($m) use($option){  //ex 'self::cb1'
+              return '=> '.self::modifyVarExport($m[1], true, $option).",\n"; 
+            }, 
+            $t
           );
-        
+        }
       }
       if(strncmp($typeInfo,'resource(gd)',12) === 0) {
         $recadd .= $t."</td></tr>";
@@ -936,10 +952,6 @@ class Debug
     }
     $recadd .= "</table>"."\r\n";
     return $recadd;
-  }
-  
-  protected static function cb1($m){
-    return '=> '.self::modifyVarExport($m[1]).",\n";
   }
   
   protected static function closeLog() {
@@ -1015,6 +1027,38 @@ class Debug
     //$backtrace = debug_backtrace();
     $message = self::getErrorTypName($errors['type'])." :".$errors['message'];
     self::displayAndLog(array($message),$backtrace); 
+  }
+
+ /*
+  * detect the UTF encodings 
+  * @param string $string
+  * @return string : UTF-8, UTF-8_BOM, UTF-16, UTF-16_BOM 
+  *  UTF-32, UTF-32_BOM, Other
+  */
+  public static function detectUTFencoding($string)
+  {
+    $checks = [
+      'UTF-32LE' => ['~^\xff\xfe\x00\x00~','~^[^\x00].\x00\x00$~'],
+      'UTF-32BE' => ['~^\x00\x00\xfe\xff~','~^\x00\x00.[^\x00]$~'],
+      'UTF-16LE' => ['~^\xff\xfe~','~^[^\x00]\x00[^\x00]\x00$~'],
+      'UTF-16BE' => ['~^\xfe\xff~','~^\x00[^\x00]\x00[^\x00]$~'],
+      'UTF-8' => ['~^\xef\xbb\xbf~','~^[^\x00][^\x00][^\x00][^\x00]$~']
+    ];
+    foreach($checks as $key => $regEx){ //check BOM
+      if(preg_match($regEx[0],$string)) return $key.'_BOM';
+    }
+    $subStr = substr($string,0,64);
+    $arr = str_split($subStr,4);
+    $count = 0;
+    $coding = "";
+    foreach($checks as $key => $regEx){
+      $curCount = count(preg_grep($regEx[1],$arr));
+      if($count > $curCount) continue;
+      $count = $curCount;
+      $coding = $key;
+    }
+    if($coding !== 'UTF-8') return $coding;
+    return preg_match('//u',$subStr) ? $coding : 'Other';
   }
 
 }
