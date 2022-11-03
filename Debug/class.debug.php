@@ -3,10 +3,10 @@
 	Simple PHP Debug Class
 .---------------------------------------------------------------------------.
 |  Software: Debug - Simple PHP Debug Class                                 |
-|  @Version: 2.51                                                           |
+|  @Version: 2.52                                                           |
 |      Site: http://jspit.de/?page=debug                                    |
 | ------------------------------------------------------------------------- |
-| Copyright © 2010-2018, Peter Junk (alias jspit). All Rights Reserved.     |
+| Copyright © 2010-2022, Peter Junk (alias jspit). All Rights Reserved.     |
 | ------------------------------------------------------------------------- |
 |   License: Distributed under the Lesser General Public License (LGPL)     |
 |            http://www.gnu.org/copyleft/lesser.html                        |
@@ -14,7 +14,7 @@
 | ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or     |
 | FITNESS FOR A PARTICULAR PURPOSE.                                         |
 '---------------------------------------------------------------------------'
-  Date Last modify : 2021-11-21
+  Date Last modify : 2022-10-26
   2013-02-25: add function strhex 
   2013-05-29: new stop-Method
   2013-06-19: +DOM
@@ -61,10 +61,11 @@
   2020-07-15: V2.49 modify writeHex, PHP > 5.5
   2021-01-27: V2.50 modify modifyVarExport
   2021-08-12: V2.51 modify recArg error handling gd
+  2022-10-22: V2.52 modify Unidecode, GDImage (PHP8)
 */
-if (version_compare(PHP_VERSION, '5.5.0', '<') ) {
+if (version_compare(PHP_VERSION, '7.0', '<') ) {
   throw new Exception(htmlspecialchars(
-    "Simple PHP Debug Class requires at least PHP version 5.5.0!",
+    "Simple PHP Debug Class requires at least PHP version 7.0!",
     ENT_QUOTES,"UTF-8")
   );
 }
@@ -103,7 +104,7 @@ class Debug
 
   */
   
-  const VERSION = "2.51";
+  const VERSION = "2.52";
   //convert special chars in hex-code
   public static $showSpecialChars = true;           
   //shows the debug info promptly
@@ -451,10 +452,11 @@ class Debug
 
   /*
    * return char for Unicode-Format U+20ac (U+0000..U+3FFF)
+   * false if error
    */
   public static function UniDecode($strUplus){
-    $strUplus = preg_replace("/U\+([0-9A-F]{4})/i", "&#x\\1;", $strUplus); //4 Hexzahlen nach U+ rausfiltern
-    return html_entity_decode($strUplus, ENT_QUOTES, 'UTF-8');
+    $str = preg_replace("/^U\+([0-9A-F]{4,5}$)/i", "&#x\\1;", $strUplus); //4-5 Hexzahlen nach U+ rausfiltern
+    return $str != $strUplus ? html_entity_decode($str, ENT_QUOTES, 'UTF-8') : false;
    }
 
 
@@ -542,7 +544,7 @@ class Debug
       }
       return 'ISO-8859-1';
     }
-    return false;
+    //return false;
   }
   
   //set a new color for background of title
@@ -854,7 +856,8 @@ class Debug
           $t = $arg;
         }
       }
-      elseif(strncmp($typeInfo,'resource(gd)',12) === 0) {
+      elseif(strncmp($typeInfo,'resource(gd)',12) === 0 OR
+        strncmp($typeInfo,'object(GdImage)',15) === 0) {
         $attribute = 'style="'.self::$gdStyle.'"';
         ob_start();
         if(self::$gdOutputFormat == 'jpg') {
@@ -897,11 +900,11 @@ class Debug
             if($r) $t = $match[1];
           }
         }
-        elseif ($arg instanceof DOMElement && true) {
+        elseif ($arg instanceof DOMElement) {
           //neu 19.6.2013
           $t = $arg->ownerDocument->saveXML($arg);
         }
-        elseif ($arg instanceof DOMDocument && true) {
+        elseif ($arg instanceof DOMDocument) {
           //neu 19.6.2013
           $arg->formatOutput = true;
           $t = $arg->saveXML();
@@ -938,7 +941,8 @@ class Debug
           );
         }
       }
-      if(strncmp($typeInfo,'resource(gd)',12) === 0) {
+      if(strncmp($typeInfo,'resource(gd)',12) === 0 OR
+        strncmp($typeInfo,'object(GdImage)',15) === 0) {
         $recadd .= $t."</td></tr>";
       }
       else {
@@ -1030,12 +1034,13 @@ class Debug
   }
 
  /*
-  * detect the UTF encodings 
+  * detect UTF encodings 
   * @param string $string
+  * @param int $checkLen : uses a maximum of checkLen bytes for analysis
   * @return string : UTF-8, UTF-8_BOM, UTF-16, UTF-16_BOM 
   *  UTF-32, UTF-32_BOM, Other
   */
-  public static function detectUTFencoding($string)
+  public static function detectUTFencoding($string, $checkLen = 64)
   {
     $checks = [
       'UTF-32LE' => ['~^\xff\xfe\x00\x00~','~^[^\x00].\x00\x00$~'],
@@ -1047,18 +1052,19 @@ class Debug
     foreach($checks as $key => $regEx){ //check BOM
       if(preg_match($regEx[0],$string)) return $key.'_BOM';
     }
-    $subStr = substr($string,0,64);
+    $subStr = substr($string,0,$checkLen);
     $arr = str_split($subStr,4);
     $count = 0;
     $coding = "";
     foreach($checks as $key => $regEx){
-      $curCount = count(preg_grep($regEx[1],$arr));
+      $filterArr = preg_grep($regEx[1],$arr);
+      $curCount = $filterArr ? count($filterArr) : 0;
       if($count > $curCount) continue;
       $count = $curCount;
       $coding = $key;
     }
-    if($coding !== 'UTF-8') return $coding;
-    return preg_match('//u',$subStr) ? $coding : 'Other';
+    if($coding !== 'UTF-8' OR preg_match('//u',$subStr)) return $coding;
+    return 'Other';
   }
 
 }
