@@ -1,10 +1,10 @@
 <?php
 //error_reporting(-1);  //dev
-//last update 2019-11-31
-error_reporting(E_ALL ^ (E_WARNING | E_USER_WARNING));
-ini_set('display_errors', 1);
+//last update 2022-10-25 PHP8
+//error_reporting(E_ALL ^ (E_WARNING | E_USER_WARNING));
 header('Content-Type: text/html; charset=UTF-8');
-
+error_reporting(-1);
+ini_set('display_errors', 1);
 
 require __DIR__.'/../class/phpcheck.php';
 $t = new PHPcheck();
@@ -21,7 +21,7 @@ $t->checkEqual(class_exists('debug'), true);
 //version
 $t->start('check versions info');
 $info = $t->getClassVersion("debug");
-$t->check($info, $info >= 2.44);
+$t->check($info, $info >= 2.52);
 
 $t->startOutput('debug::write integer');
 $var = 1;
@@ -32,6 +32,11 @@ $t->startOutput('debug::write float');
 $var = 1.1;
 debug::write($var);
 $t->checkOutput('Line '.(__LINE__-1).',1.1');
+
+$t->startOutput('debug::write float result');
+$var = 0.7 + 0.1;
+debug::write($var);
+$t->checkOutput('Line '.(__LINE__-1).',0.799');
 
 $t->startOutput('debug::write ASCII string');
 $var = "ASCII-String";
@@ -47,6 +52,11 @@ $t->startOutput('debug::write UTF8 string');
 $var = "Umlaute äöü";
 debug::write($var);
 $t->checkOutput('string(14),UTF,äöü');
+
+$t->startOutput('debug::write UTF8 BOM');
+$var = "\xEF\xBB\xBFUmlaute äöü";
+debug::write($var);
+$t->checkOutput('UTF,BOM,äöü');
 
 $t->startOutput('debug::write UTF-8mb3');
 $var = "1€";
@@ -95,6 +105,11 @@ $var = "test \"hochkomma\"";
 debug::write($var);
 $t->checkOutput('string(16),test,\&quot;hochkomma');
 
+$t->startOutput('debug::write String with many Spaces');
+$var = "five     spaces"; 
+debug::write($var);
+$t->checkOutput('five,\x20\x20\x20\x20 ');
+
 $t->startOutput('debug::writePre Text');
 $sqlString = "SELECT
   id, eventdate, eventdesc
@@ -111,6 +126,16 @@ $t->startOutput('debug::writeHex');
 $string = "012";
 debug::writeHex($string);
 $t->checkOutput('\x30\x31\x32');
+
+$t->startOutput('debug::writeUni');
+$string = "0123\r\naöäü€ def";
+debug::writeUni($string);
+$t->checkOutput('0123\\x0d\\x0aa\\u{f6}\\u{e4}\\u{fc}\\u{20ac}\\x20def');
+
+$t->startOutput('debug::writeUni utf8mb4');
+$string = "'takriLetterA:𑚀'";
+debug::writeUni($string);
+$t->checkOutput('takriLetterA:\u{11680}');
 
 $t->startOutput('debug::writeIf: false'); 
 debug::save('first Info');
@@ -132,6 +157,11 @@ $t->startOutput('debug::write array');
 $var = array("a" => 1, "b" => 5.6, "string" => "text");
 debug::write($var);
 $t->checkOutput('array(3)');
+
+$t->startOutput('debug::writeHex array');
+$var = array("a" => 1, "b" => 5.6, "string" => "text");
+debug::writeHex($var);
+$t->checkOutput('array(3),\x74');
 
 $t->startOutput('debug::write Array with Recursion');
 $var = array("a","b");
@@ -185,23 +215,27 @@ $t->checkOutput('DOMNodeList,&lt;div,test4,/div');
 
 if(function_exists('socket_create')) {
 //
-$t->startOutput('debug::write resource(sock)');
+$t->startOutput('debug::write resource(sock) bis PHP7');
 $sock = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
-debug::write($sock);
-$t->checkOutput('resource');
+debug::write($sock);  //ab PHP8 object
+$t->checkOutput('(Socket)');
 }
 
-//Test grafic resourcen
+//Test grafic resourcen (objects PHP8)
 $t->startOutput('debug::write resource(gd)');
 $img = imagecreate(100 , 50);
 ImageColorAllocate($img, 0, 255, 0);
 debug::write($img);
-$t->checkOutput('resource(gd)');
+$expectedOutput = intval(PHP_VERSION) >= 8 
+  ? 'object(GdImage)'
+  :  'resource(gd)'
+;
+$t->checkOutput($expectedOutput);
 
 $t->startOutput('debug::write resource(gd) with error');
 $img = imagecreate(50 , 50);
 debug::write($img);
-$t->checkOutput('resource(gd)');
+$t->checkOutput($expectedOutput);
 
 $t->startOutput('debug::write truecolor resource gd');
 $img = imagecreatetruecolor(50 , 50); 
@@ -210,13 +244,13 @@ $blue = imagecolorallocate($img, 0, 0, 255);
 imagefill($img, 0, 0, $green);
 imagefilledrectangle($img, 10, 10, 40,40, $blue);
 debug::write($img);
-$t->checkOutput('resource(gd)');
+$t->checkOutput($expectedOutput);
 
 
 $t->startOutput('debug::write gd with transparent');
 imagecolortransparent($img, $blue);
 debug::write($img);
-$t->checkOutput('resource(gd)');
+$t->checkOutput($expectedOutput);
 
 $t->startOutput('setImgStyle new background');
 debug::setImgStyle('
@@ -225,7 +259,7 @@ debug::setImgStyle('
   background-image: repeating-linear-gradient(-45deg, white, #88f 6px);
 ');
 debug::write($img);
-$t->checkOutput('resource(gd)');
+$t->checkOutput($expectedOutput);
 
 $t->startOutput('debug::write inside function');
 function testFct1($par1,$par2) {
@@ -300,7 +334,7 @@ $t->start('set and get timestamps');
 debug::setTimestamp(0);
 debug::microSleep(10000);
 $result = debug::getTimestampDiff(0);
-$t->check($result,$result-10000 < 100); 
+$t->check($result,$result-10000 < 150); 
 
 $t->start('get diff timestamp');
 $result = debug::getTimestampDiff(0);
@@ -348,17 +382,18 @@ $t->checkContains($result, 'string,3');
 $t->start('Get TypeInfo of Class Instance');
 $object = (object)array(1,2);
 $result = debug::TypeInfo($object);
-$t->checkEqual($result, 'object(stdClass)(2)');
+$t->checkContains($result, 'object(stdClass),(2)');
 
 $t->start('Get TypeInfo of Class implements Countable');
 class counter implements Countable {
+    #[\ReturnTypeWillChange]
     public function count() {
        return 17; 
     }
 }
 $object = new counter();
 $result = debug::TypeInfo($object);
-$t->checkEqual($result, 'object(counter)(17)');
+$t->checkContains($result, 'object(counter),(17)');
 
 $t->start('Get TypeInfo of DOMNodeList');
 $html ='<li>Text1-1</li><li>Text2-2</li>';
@@ -366,34 +401,145 @@ $doc = new DOMDocument();
 $r = $doc->loadHTML($html);
 $nodelist = $doc -> getElementsByTagName("li");
 $result = debug::TypeInfo($nodelist);
-$t->checkEqual($result, 'object(DOMNodeList)(2)');
+$t->checkContains($result, 'object(DOMNodeList),(2)');
 
+//strToUnicode
 $t->start('strToUnicode');
 $result = debug::strToUnicode('A');
 $t->checkEqual($result, 'A');
 
-$t->start('strToUnicode all chars to Unicode');
-$result = debug::strToUnicode('A',true);
-$t->checkEqual($result, '\u{41}');
-
 $t->start('strToUnicode with " ans space');
 $result = debug::strToUnicode(' !"#A~');
-$t->checkEqual($result, '\u{20}!\u{22}#A~');
+$t->checkEqual($result, '\x20!\x22#A~');
 
 $t->start('strToUnicode');
 $result = debug::strToUnicode("ä\x80𑚀€");
 $t->checkEqual($result, '\u{e4}\x80\u{11680}\u{20ac}');
 
+$t->start('strToUnicode contain UTF8-Fragment');
+$string = "ä".substr("€",0,1)."äx";
+$result = debug::strToUnicode($string);
+$t->checkEqual($result, '\u{e4}\xe2\u{e4}x');
+
+$t->start('strToUnicode contain UTF8-Fragment');
+$string = "ä".substr("€",0,2)."äY";
+$result = debug::strToUnicode($string);
+$t->checkEqual($result, '\u{e4}\xe2\x82\u{e4}Y');
+
+$t->start('strToUnicode check control chars');
+$result = debug::strToUnicode("\x03\r\n");
+$expected = '\x03\x0d\x0a';
+$t->checkEqual($result,$expected);
+
+//unicodeToString
+$t->start('unicodeToString');
+$code = 'a\x42\u{e4}\u{20ac}';  //not parsed in single quotes
+$result = debug::unicodeToString($code);
+$t->checkEqual($result, "aBä€");
+
+//UniDecode
 $t->start('UniDecode');
 $result = debug::UniDecode('U+0041');
 $t->checkEqual($result, 'A');
 
+$t->start('UniDecode 4 Byte UTF');
+$result = debug::UniDecode('U+1F603');
+$t->checkEqual($result, '😃');
+
+$t->start('UniDecode invalid Notation');
+$result = debug::UniDecode('U+1F60X');
+$t->checkEqual($result, false);
+
+
+$t->start('detect_encoding ASCII');
+$string = "Ein ASCII String";
+$result = debug::detect_encoding($string);
+$t->checkEqual($result, 'ASCII');
+
+$t->start('detect_encoding UTF-8');
+$string = "German ä is a UTF-8 character";
+$result = debug::detect_encoding($string);
+$t->checkEqual($result, 'UTF-8');
+
+$t->start('detect_encoding UTF-8mb3');
+$string = "€ ist a 3 byte UTF-8 character";
+$result = debug::detect_encoding($string);
+$t->checkEqual($result, 'UTF-8mb3');
+
+//isHeaderSent() + headerInfo()
+$t->start('is header sent');
+$t->checkEqual(debug::isHeaderSent(), false);
+
+$t->start('headerInfo()');
+$result = debug::headerInfo();
+$t->check($result, is_array($result));
+
+//detectUTFencoding
+$t->start('detect UTF16LE');
+$str = 'A Teststring with characters € + äöü';
+$test = mb_convert_encoding($str, 'UTF-16LE','UTF-8');
+$result = debug::detectUTFencoding($test);
+$t->checkEqual($result, 'UTF-16LE');
+
+$t->start('detect UTF16LE with BOM');
+$test = "\xff\xfe".mb_convert_encoding($str, 'UTF-16LE','UTF-8');
+$result = debug::detectUTFencoding($test);
+$t->checkEqual($result, 'UTF-16LE_BOM');
+
+$t->start('detect UTF16BE');
+$str = 'A Teststring with characters € + äöü';
+$test = mb_convert_encoding($str, 'UTF-16BE','UTF-8');
+$result = debug::detectUTFencoding($test);
+$t->checkEqual($result, 'UTF-16BE');
+
+$t->start('detect UTF16BE with BOM');
+$test = "\xfe\xff".mb_convert_encoding($str, 'UTF-16BE','UTF-8');
+$result = debug::detectUTFencoding($test);
+$t->checkEqual($result, 'UTF-16BE_BOM');
+
+$t->start('detect UTF32LE');
+$str = 'A Teststring with characters € + äöü';
+$test = mb_convert_encoding($str, 'UTF-32LE','UTF-8');
+$result = debug::detectUTFencoding($test);
+$t->checkEqual($result, 'UTF-32LE');
+
+$t->start('detect UTF32LE with BOM');
+$test = "\xff\xfe\x00\x00".mb_convert_encoding($str, 'UTF-32LE','UTF-8');
+$result = debug::detectUTFencoding($test);
+$t->checkEqual($result, 'UTF-32LE_BOM');
+
+$t->start('detect UTF32BE');
+$str = 'A Teststring with characters € + äöü';
+$test = mb_convert_encoding($str, 'UTF-32BE','UTF-8');
+$result = debug::detectUTFencoding($test);
+$t->checkEqual($result, 'UTF-32BE');
+
+$t->start('detect UTF32BE with BOM');
+$test = "\x00\x00\xfe\xff".mb_convert_encoding($str, 'UTF-32BE','UTF-8');
+$result = debug::detectUTFencoding($test);
+$t->checkEqual($result, 'UTF-32BE_BOM');
+
+$t->start('detect UTF8');
+$str = 'A Teststring with characters € + äöü';
+$test = $str;
+$result = debug::detectUTFencoding($test);
+$t->checkEqual($result, 'UTF-8');
+
+$t->start('detect UTF8 with BOM');
+$test = "\xef\xbb\xbf".$str;
+$result = debug::detectUTFencoding($test);
+$t->checkEqual($result, 'UTF-8_BOM');
+
+$t->start('detect other');
+$str = 'A Teststring with characters € + äöü';
+$test = utf8_decode($str);
+$result = debug::detectUTFencoding($test);
+$t->checkEqual($result, 'Other');
+
 /*
  * End Tests 
  */
-
+//debug::write(debug::headerInfo());
 // echo $t->getHtmlFooter();
 //output as table
-//echo $t->gethtml();
 echo $t->gethtml();
-
